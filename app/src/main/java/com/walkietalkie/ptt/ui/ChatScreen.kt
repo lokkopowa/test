@@ -31,9 +31,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.PublicOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -72,6 +75,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.walkietalkie.ptt.ChatItem
 import com.walkietalkie.ptt.PhotoUtils
 import com.walkietalkie.ptt.WalkieViewModel
+import com.walkietalkie.ptt.net.InternetLink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -86,6 +90,8 @@ fun ChatScreen(vm: WalkieViewModel) {
     val messages by vm.messages.collectAsStateWithLifecycle()
     val speaking by vm.speaking.collectAsStateWithLifecycle()
     val transmitting by vm.transmitting.collectAsStateWithLifecycle()
+    val internetState by vm.internetState.collectAsStateWithLifecycle()
+    val nearbyOn by vm.nearbyOn.collectAsStateWithLifecycle()
     var fullscreen by remember { mutableStateOf<File?>(null) }
 
     Scaffold(
@@ -96,7 +102,13 @@ fun ChatScreen(vm: WalkieViewModel) {
                         Text("Canale ${vm.channelName}", fontWeight = FontWeight.Bold)
                         Text(
                             if (peers.isEmpty()) "Nessuno connesso"
-                            else "${peers.size} connessi: ${peers.values.joinToString()}",
+                            else "${peers.size} connessi: " + peers.values.joinToString {
+                                it.nick + when {
+                                    it.nearby && it.internet -> " 📡🌐"
+                                    it.nearby -> " 📡"
+                                    else -> " 🌐"
+                                }
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -104,6 +116,7 @@ fun ChatScreen(vm: WalkieViewModel) {
                     }
                 },
                 actions = {
+                    LinkStatus(nearbyOn, internetState)
                     IconButton(onClick = vm::stop) {
                         Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Esci dal canale")
                     }
@@ -143,6 +156,27 @@ fun ChatScreen(vm: WalkieViewModel) {
     }
 
     fullscreen?.let { file -> PhotoDialog(file) { fullscreen = null } }
+}
+
+/** Icone di stato dei due collegamenti: vicino (Bluetooth/Wi-Fi) e internet. */
+@Composable
+private fun LinkStatus(nearbyOn: Boolean, internetState: InternetLink.State?) {
+    if (nearbyOn) {
+        Icon(
+            Icons.Filled.Bluetooth,
+            contentDescription = "Vicino attivo",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+    }
+    if (internetState != null) {
+        val (icon, tint, label) = when (internetState) {
+            InternetLink.State.ONLINE -> Triple(Icons.Filled.Public, MaterialTheme.colorScheme.primary, "Internet collegato")
+            InternetLink.State.CONNECTING -> Triple(Icons.Filled.Public, MaterialTheme.colorScheme.outline, "Internet: collegamento…")
+            else -> Triple(Icons.Filled.PublicOff, MaterialTheme.colorScheme.error, "Internet non raggiungibile")
+        }
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.padding(horizontal = 4.dp))
+    }
 }
 
 @Composable

@@ -12,7 +12,6 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
 import android.util.Log
 import java.io.InputStream
-import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -31,9 +30,12 @@ class AudioEngine {
     /** Flag della sessione di registrazione corrente (una nuova per ogni pressione del PTT). */
     private var session: AtomicBoolean? = null
 
-    /** Inizia a registrare dal microfono e scrive il PCM su [out] finché non si chiama [stopRecording]. */
+    /**
+     * Inizia a registrare dal microfono: ogni 20 ms passa il PCM a [onFrame] finché non si chiama
+     * [stopRecording]; alla fine chiama [onEnd]. Le callback girano sul thread di registrazione.
+     */
     @SuppressLint("MissingPermission") // il permesso viene chiesto prima di avviare la sessione
-    fun startRecording(out: OutputStream) {
+    fun startRecording(onFrame: (ByteArray, Int) -> Unit, onEnd: () -> Unit) {
         if (session != null) return
         val active = AtomicBoolean(true)
         session = active
@@ -57,17 +59,14 @@ class AudioEngine {
                 recorder.startRecording()
                 while (active.get()) {
                     val n = recorder.read(buf, 0, buf.size)
-                    if (n > 0) {
-                        out.write(buf, 0, n)
-                        out.flush()
-                    }
+                    if (n > 0) onFrame(buf, n)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Registrazione interrotta", e)
             } finally {
                 runCatching { recorder.stop() }
                 recorder.release()
-                runCatching { out.close() }
+                onEnd()
             }
         }
     }
@@ -77,8 +76,11 @@ class AudioEngine {
         session = null
     }
 
-    /** Riproduce un flusso PCM in arrivo finché il mittente non rilascia il tasto. */
-    fun play(input: InputStream, onFinished: () -> Unit) {
+    /**
+     * Riproduce un flusso PCM in arrivo finché il mittente non rilascia il tasto.
+     * [prebufferMs] accumula un po' di audio prima di partire, per assorbire i ritardi della rete.
+     */
+    fun play(input: InputStream, prebufferMs: Int = 0, onFinished: () -> Unit) {
         thread(name = "ptt-play") {
             val minBuf = AudioTrack.getMinBufferSize(
                 SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -103,7 +105,15 @@ class AudioEngine {
 
             val buf = ByteArray(FRAME_BYTES)
             try {
+                val prebuffer = ByteArray(SAMPLE_RATE * 2 * prebufferMs / 1000)
+                var filled = 0
+                while (filled < prebuffer.size) {
+                    val n = input.read(prebuffer, filled, prebuffer.size - filled)
+                    if (n < 0) break
+                    filled += n
+                }
                 track.play()
+                if (filled > 0) track.write(prebuffer, 0, filled)
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break

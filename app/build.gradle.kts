@@ -46,4 +46,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
+    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("io.moquette:moquette-broker:0.17")
 }
