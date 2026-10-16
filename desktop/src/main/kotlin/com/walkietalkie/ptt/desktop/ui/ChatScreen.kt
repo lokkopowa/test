@@ -89,6 +89,7 @@ fun ChatScreen(client: DesktopClient, onTypingChange: (Boolean) -> Unit) {
     val speaking by client.speaking.collectAsState()
     val transmitting by client.transmitting.collectAsState()
     val linkState by client.linkState.collectAsState()
+    val keyCode by client.keyCode.collectAsState()
 
     Scaffold(
         topBar = {
@@ -97,8 +98,9 @@ fun ChatScreen(client: DesktopClient, onTypingChange: (Boolean) -> Unit) {
                     Column {
                         Text("Canale ${client.channelName}", fontWeight = FontWeight.Bold)
                         Text(
-                            if (peers.isEmpty()) "Nessuno connesso"
-                            else "${peers.size} connessi: ${peers.values.joinToString()}",
+                            (keyCode?.let { "Codice $it · " } ?: "") +
+                                if (peers.isEmpty()) "Nessuno connesso"
+                                else "${peers.size} connessi: ${peers.values.joinToString()}",
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

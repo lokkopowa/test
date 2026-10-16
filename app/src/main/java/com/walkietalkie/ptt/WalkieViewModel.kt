@@ -115,10 +115,18 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
     private val _internetState = MutableStateFlow<InternetLink.State?>(null)
     val internetState: StateFlow<InternetLink.State?> = _internetState.asStateFlow()
 
+    /** Codice chiave del canale internet (null finché non è calcolato o se internet è spento). */
+    private val _keyCode = MutableStateFlow<String?>(null)
+    val keyCode: StateFlow<String?> = _keyCode.asStateFlow()
+
     private val _nearbyOn = MutableStateFlow(false)
     val nearbyOn: StateFlow<Boolean> = _nearbyOn.asStateFlow()
 
     val channelName get() = settings.channel
+
+    private val appVersion: String by lazy {
+        runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?"
+    }
 
     // Nearby
     private val endpoints = ConcurrentHashMap<String, String>() // endpointId -> uid
@@ -151,7 +159,7 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
         )
         channelId = ChannelCrypto.channelId(settings.channel, settings.password)
         _started.value = true
-        addSystem("Sei sul canale \"${settings.channel}\" come $nickname. In attesa di altri telefoni…")
+        addSystem("Walkie PTT $appVersion · canale \"${settings.channel}\" come $nickname. In attesa di altri telefoni…")
 
         if (settings.useNearby) {
             _nearbyOn.value = true
@@ -189,6 +197,8 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
         internet?.close(Packet.Bye(myUid, nickname))
         internet = null
         _internetState.value = null
+        _keyCode.value = null
+        undecryptableWarned = false
         nearby.stopAdvertising()
         nearby.stopDiscovery()
         nearby.stopAllEndpoints()
@@ -406,6 +416,8 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
             val link = try {
                 // PBKDF2 richiede qualche decina di ms: lontano dal thread principale.
                 val crypto = ChannelCrypto(settings.channel, settings.password)
+                _keyCode.value = crypto.fingerprint
+                addSystem("Codice chiave ${crypto.fingerprint}: deve essere uguale su tutti i dispositivi del canale")
                 InternetLink(settings.broker, crypto, "wptt-$myUid", internetListener)
             } catch (e: Exception) {
                 Log.w(TAG, "Collegamento internet non avviato", e)
@@ -419,8 +431,20 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    @Volatile
+    private var undecryptableWarned = false
+
     private val internetListener = object : InternetLink.Listener {
         private var lastState: InternetLink.State? = null
+
+        override fun onUndecryptable() {
+            if (undecryptableWarned) return
+            undecryptableWarned = true
+            addSystem(
+                "Sul canale c'è un dispositivo che non si riesce a capire: probabilmente ha una " +
+                    "versione diversa dell'app. Aggiorna tutti e controlla che il codice chiave sia uguale."
+            )
+        }
 
         override fun onState(state: InternetLink.State, detail: String?) {
             if (state == InternetLink.State.OFF) return

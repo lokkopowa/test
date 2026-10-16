@@ -69,10 +69,19 @@ class DesktopClient(
     private val _transmitting = MutableStateFlow(false)
     val transmitting: StateFlow<Boolean> = _transmitting.asStateFlow()
 
+    private val _keyCode = MutableStateFlow<String?>(null)
+    val keyCode: StateFlow<String?> = _keyCode.asStateFlow()
+
+    @Volatile
+    private var undecryptableWarned = false
+
     private val _linkState = MutableStateFlow<InternetLink.State?>(null)
     val linkState: StateFlow<InternetLink.State?> = _linkState.asStateFlow()
 
     val channelName get() = settings.channel
+
+    /** Versione impostata da jpackage negli installer; "sviluppo" se avviato da sorgente. */
+    val appVersion: String = System.getProperty("jpackage.app-version") ?: "sviluppo"
 
     private val lastSeen = ConcurrentHashMap<String, Long>()
     private val seen = object : LinkedHashMap<String, Boolean>() {
@@ -97,11 +106,14 @@ class DesktopClient(
         )
         photoDir.mkdirs()
         _started.value = true
-        addSystem("Sei sul canale \"${settings.channel}\" come $nick. In attesa dei telefoni…")
+        addSystem("Walkie PTT $appVersion · canale \"${settings.channel}\" come $nick. In attesa dei telefoni…")
         _linkState.value = InternetLink.State.CONNECTING
 
         val newLink = try {
-            InternetLink(settings.broker, ChannelCrypto(settings.channel, settings.password), "wptt-$uid", listener)
+            val crypto = ChannelCrypto(settings.channel, settings.password)
+            _keyCode.value = crypto.fingerprint
+            addSystem("Codice chiave ${crypto.fingerprint}: deve essere uguale su tutti i dispositivi del canale")
+            InternetLink(settings.broker, crypto, "wptt-$uid", listener)
         } catch (e: Exception) {
             _linkState.value = InternetLink.State.ERROR
             addSystem("Collegamento non avviato (${settings.broker}): ${e.javaClass.simpleName} ${e.message ?: ""}")
@@ -139,6 +151,8 @@ class DesktopClient(
         _speaking.value = emptySet()
         _messages.value = emptyList()
         _linkState.value = null
+        _keyCode.value = null
+        undecryptableWarned = false
         photoDir.listFiles()?.forEach { it.delete() }
         _started.value = false
     }
@@ -147,6 +161,15 @@ class DesktopClient(
 
     private val listener = object : InternetLink.Listener {
         private var lastState: InternetLink.State? = null
+
+        override fun onUndecryptable() {
+            if (undecryptableWarned) return
+            undecryptableWarned = true
+            addSystem(
+                "Sul canale c'è un dispositivo che non si riesce a capire: probabilmente ha una " +
+                    "versione diversa dell'app. Aggiorna tutti e controlla che il codice chiave sia uguale."
+            )
+        }
 
         override fun onState(state: InternetLink.State, detail: String?) {
             if (state == InternetLink.State.OFF) return

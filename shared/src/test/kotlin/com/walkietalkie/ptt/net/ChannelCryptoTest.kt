@@ -45,6 +45,15 @@ class ChannelCryptoTest {
     }
 
     @Test
+    fun fingerprintMatchesOnlyForSameKey() {
+        val a = ChannelCrypto("squadra", "segreta").fingerprint
+        assertEquals(6, a.length)
+        assertEquals(a, ChannelCrypto("squadra", "segreta").fingerprint)
+        assertNotEquals(a, ChannelCrypto("squadra", "altra").fingerprint)
+        assertNotEquals(a, ChannelCrypto("Squadra", "segreta").fingerprint)
+    }
+
+    @Test
     fun wrongPasswordCannotRead() {
         val a = ChannelCrypto("squadra", "segreta")
         val other = ChannelCrypto("squadra", "sbagliata")

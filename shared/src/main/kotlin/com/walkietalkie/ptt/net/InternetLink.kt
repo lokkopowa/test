@@ -30,6 +30,12 @@ class InternetLink(
         fun onState(state: State, detail: String? = null)
         fun onConnected()
         fun onPacket(packet: Packet)
+
+        /**
+         * Sul canale arrivano messaggi che non si riescono a decifrare: un altro dispositivo usa
+         * una chiave diversa (di solito una versione diversa dell'app).
+         */
+        fun onUndecryptable() = Unit
     }
 
     private val client = MqttAsyncClient(brokerUrl, clientId, MemoryPersistence())
@@ -72,7 +78,10 @@ class InternetLink(
             }
 
             override fun messageArrived(topic: String?, message: MqttMessage) {
-                val plain = crypto.decrypt(message.payload) ?: return
+                val plain = crypto.decrypt(message.payload) ?: run {
+                    listener.onUndecryptable()
+                    return
+                }
                 val packet = Packet.decode(plain) ?: return
                 runCatching { listener.onPacket(packet) }
                     .onFailure { log.log(Level.WARNING, "onPacket", it) }

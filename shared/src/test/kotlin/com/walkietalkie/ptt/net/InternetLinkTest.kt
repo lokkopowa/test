@@ -24,6 +24,10 @@ class InternetLinkTest {
     private class Recorder : InternetLink.Listener {
         val packets = CopyOnWriteArrayList<Packet>()
         val connected = CountDownLatch(1)
+        @Volatile var undecryptable = 0
+        override fun onUndecryptable() {
+            undecryptable++
+        }
         override fun onState(state: InternetLink.State, detail: String?) = Unit
         override fun onConnected() = connected.countDown()
         override fun onPacket(packet: Packet) {
@@ -106,6 +110,23 @@ class InternetLinkTest {
         waitFor(10_000) { recB.packets.size >= 63 }
         assertEquals(3, recB.packets.filterIsInstance<Packet.Photo>().map { it.mid }.distinct().size)
         assertEquals(60, recB.packets.filterIsInstance<Packet.Chat>().map { it.mid }.distinct().size)
+    }
+
+    @Test
+    fun foreignKeyOnSameTopicIsReported() {
+        // Come un dispositivo con una versione dell'app che deriva la chiave in modo diverso:
+        // stesso topic, ma byte che non si decifrano. Prima venivano scartati in silenzio.
+        val rec = Recorder()
+        link("a", "1", "", rec)
+        val topic = ChannelCrypto("1", "").topic
+        val raw = org.eclipse.paho.client.mqttv3.MqttClient("tcp://127.0.0.1:$port", "old-version",
+            org.eclipse.paho.client.mqttv3.persist.MemoryPersistence())
+        raw.connect()
+        raw.publish(topic, ByteArray(64) { 1 }, 1, false)
+        waitFor { rec.undecryptable > 0 }
+        raw.disconnect()
+        assertTrue(rec.undecryptable > 0)
+        assertTrue(rec.packets.isEmpty())
     }
 
     @Test

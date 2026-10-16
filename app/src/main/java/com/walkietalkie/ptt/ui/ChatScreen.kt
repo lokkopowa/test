@@ -92,6 +92,7 @@ fun ChatScreen(vm: WalkieViewModel) {
     val transmitting by vm.transmitting.collectAsStateWithLifecycle()
     val internetState by vm.internetState.collectAsStateWithLifecycle()
     val nearbyOn by vm.nearbyOn.collectAsStateWithLifecycle()
+    val keyCode by vm.keyCode.collectAsStateWithLifecycle()
     var fullscreen by remember { mutableStateOf<File?>(null) }
 
     Scaffold(
@@ -101,8 +102,9 @@ fun ChatScreen(vm: WalkieViewModel) {
                     Column {
                         Text("Canale ${vm.channelName}", fontWeight = FontWeight.Bold)
                         Text(
-                            if (peers.isEmpty()) "Nessuno connesso"
-                            else "${peers.size} connessi: " + peers.values.joinToString {
+                            (keyCode?.let { "Codice $it · " } ?: "") +
+                                if (peers.isEmpty()) "Nessuno connesso"
+                                else "${peers.size} connessi: " + peers.values.joinToString {
                                 it.nick + when {
                                     it.nearby && it.internet -> " 📡🌐"
                                     it.nearby -> " 📡"

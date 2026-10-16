@@ -29,6 +29,15 @@ class ChannelCrypto(channel: String, password: String) {
     )
     private val random = SecureRandom()
 
+    /**
+     * "Codice chiave" da mostrare all'utente: 6 caratteri ricavati dalla chiave vera.
+     * Se due dispositivi mostrano codici diversi non possono capirsi (canale, password o
+     * versione dell'app diversi). Non permette di risalire alla chiave.
+     */
+    val fingerprint: String = MessageDigest.getInstance("SHA-256")
+        .digest("walkieptt|fingerprint|".toByteArray() + key.encoded)
+        .take(3).joinToString("") { "%02X".format(it) }
+
     fun encrypt(plain: ByteArray): ByteArray {
         val iv = ByteArray(IV_SIZE).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")

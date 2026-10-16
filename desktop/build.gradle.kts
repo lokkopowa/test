@@ -37,7 +37,9 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "WalkiePTT"
-            packageVersion = "1.0.0"
+            // Numero nuovo a ogni build di GitHub: con lo stesso numero l'installer di Windows non
+            // sostituisce la versione già installata.
+            packageVersion = "1.1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
             description = "Walkie talkie PTT, chat e foto con l'app Android Walkie PTT"
             vendor = "Walkie PTT"
             includeAllModules = true
