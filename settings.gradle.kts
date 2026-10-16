@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "WalkiePTT"
-include(":app")
+include(":shared", ":app", ":desktop")

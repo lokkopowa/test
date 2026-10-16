@@ -1,0 +1,75 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: App Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test e APK
+        run: ./gradlew :shared:test :app:lintDebug :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: walkie-ptt-android-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+  desktop:
+    name: PC (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            tasks: :desktop:packageMsi :desktop:packageExe
+            artifact: walkie-ptt-windows
+          - os: macos-latest
+            tasks: :desktop:packageDmg
+            artifact: walkie-ptt-macos
+          - os: ubuntu-latest
+            tasks: :desktop:test :desktop:packageDeb :desktop:packageUberJarForCurrentOS
+            artifact: walkie-ptt-linux
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Installer
+        run: ./gradlew ${{ matrix.tasks }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            desktop/build/compose/binaries/main/*/*
+            desktop/build/compose/jars/*.jar
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*

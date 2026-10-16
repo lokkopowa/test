@@ -1,7 +1,8 @@
 # Walkie PTT 📻
 
 App Android semplice che trasforma il telefono in un **walkie talkie push‑to‑talk**, con
-**minichat** e **scambio di foto istantanee**. Funziona in due modi, anche insieme:
+**minichat** e **scambio di foto istantanee**, più una **versione per PC** (Windows, macOS,
+Linux) per parlare dal computer con tutti i telefoni. Il telefono funziona in due modi, anche insieme:
 
 | Collegamento | Come | Portata |
 |---|---|---|
@@ -32,6 +33,29 @@ automaticamente. Inoltre foto e voce passano da internet solo se c'è qualcuno r
 4. Premi **Entra nel canale** e concedi i permessi. In alto vedi chi è connesso:
    📡 = vicino, 🌐 = via internet. Le icone a destra mostrano lo stato dei collegamenti.
 
+## 💻 Versione PC
+
+La versione PC parla con tutti i telefoni che hanno il collegamento **Internet** attivo sullo
+stesso **canale + password** (il PC non ha il Bluetooth "Nearby" di Google, quindi usa solo internet).
+
+| | |
+|---|---|
+| 🎙️ **PTT** | Tieni premuto il tasto rosso con il mouse **oppure la barra SPAZIO** (quando non stai scrivendo; premi **Esc** o clicca sulla chat per uscire dal campo messaggio). |
+| 💬 **Chat** | Scrivi e premi **Invio**. |
+| 📷 **Foto** | Pulsante 🖼️ per scegliere una o più immagini (vengono ridimensionate come sul telefono). Clic su una foto ricevuta per aprirla col visualizzatore del PC, da cui puoi salvarla. |
+
+**Installazione:** scarica l'installer dalla pagina *Releases* del repository (o dalla scheda
+*Actions* → ultima esecuzione → artefatto `walkie-ptt-windows` / `-macos` / `-linux`):
+
+- **Windows**: `WalkiePTT-1.0.0.msi` (o `.exe`)
+- **macOS**: `WalkiePTT-1.0.0.dmg` (al primo avvio: tasto destro → Apri; consenti il microfono)
+- **Linux**: `walkieptt_1.0.0_amd64.deb`, oppure il `.jar` (serve Java 17+: `java -jar WalkiePTT-linux-x64-1.0.0.jar`)
+
+Gli installer includono già Java: non serve installare altro. Gli installer non sono firmati,
+quindi Windows/macOS potrebbero mostrare un avviso di sicurezza la prima volta.
+
+Da sorgente: `./gradlew :desktop:run`.
+
 ### Il server internet
 
 Per non dover gestire un server, l'app usa di default il **broker MQTT pubblico gratuito di
@@ -48,31 +72,45 @@ EMQX Cloud). Tutti i telefoni devono usare lo stesso server.
 
 **Android Studio:** apri la cartella del progetto e premi ▶️ Run.
 
-**Riga di comando** (serve l'Android SDK, con `ANDROID_HOME` o `local.properties`):
+**Riga di comando** (per l'app serve l'Android SDK, con `ANDROID_HOME` o `local.properties`):
 
 ```bash
-./gradlew testDebugUnitTest assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew :shared:test :app:assembleDebug   # APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew :desktop:test :desktop:run          # versione PC
+./gradlew :desktop:packageDistributionForCurrentOS   # installer per il sistema in uso
 ```
 
-**Senza installare nulla:** ad ogni push GitHub Actions esegue i test e compila l'APK;
-scaricalo dalla scheda *Actions* → ultima esecuzione → artefatto `walkie-ptt-debug-apk`.
+**Senza installare nulla:** ad ogni push GitHub Actions esegue i test e compila l'APK e gli
+installer per Windows, macOS e Linux (scheda *Actions* → ultima esecuzione → artefatti).
+Creando un tag `v1.0.0` (o simile) li pubblica anche in una *Release*.
 
 ## Come è fatta
 
 ```
-app/src/main/java/com/walkietalkie/ptt/
-├── MainActivity.kt        // avvio, schermo sempre acceso
-├── WalkieViewModel.kt     // gestisce i due collegamenti, i telefoni connessi e i doppioni
-├── AudioEngine.kt         // microfono -> PCM 16 kHz e riproduzione su altoparlante
-├── PhotoUtils.kt          // ridimensiona, raddrizza (EXIF) e comprime le foto
-├── ChatItem.kt            // modello dei messaggi
-├── net/
-│   ├── InternetLink.kt    // client MQTT (Eclipse Paho) con riconnessione automatica
-│   ├── ChannelCrypto.kt   // chiave PBKDF2 da canale+password, AES-GCM, topic hashato
-│   ├── Packet.kt          // formato binario dei messaggi via internet
-│   └── VoiceCodec.kt      // PCM 16 kHz <-> G.711 µ-law 8 kHz
-└── ui/                    // schermate Jetpack Compose (impostazioni e canale)
+shared/    codice comune (Kotlin/JVM), usato da telefono e PC: stesso protocollo garantito
+└── com/walkietalkie/ptt/
+    ├── ChatItem.kt            // modello dei messaggi
+    └── net/
+        ├── InternetLink.kt    // client MQTT (Eclipse Paho) con riconnessione automatica
+        ├── ChannelCrypto.kt   // chiave PBKDF2 da canale+password, AES-GCM, topic hashato
+        ├── Packet.kt          // formato binario dei messaggi via internet
+        └── VoiceCodec.kt      // PCM 16 kHz <-> G.711 µ-law 8 kHz
+
+app/       app Android
+└── com/walkietalkie/ptt/
+    ├── MainActivity.kt        // avvio, schermo sempre acceso
+    ├── WalkieViewModel.kt     // gestisce i due collegamenti, i telefoni connessi e i doppioni
+    ├── AudioEngine.kt         // microfono -> PCM 16 kHz e riproduzione su altoparlante
+    ├── PhotoUtils.kt          // ridimensiona, raddrizza (EXIF) e comprime le foto
+    └── ui/                    // schermate Jetpack Compose (impostazioni e canale)
+
+desktop/   versione PC (Compose Multiplatform)
+└── com/walkietalkie/ptt/desktop/
+    ├── Main.kt                // finestra, PTT con la barra spaziatrice
+    ├── DesktopClient.kt       // logica: presenza, chat, foto, voce (solo internet)
+    ├── JavaSoundAudio.kt      // microfono e altoparlanti con Java Sound
+    ├── Photos.kt              // ridimensiona e comprime le immagini
+    └── ui/                    // schermate (impostazioni e canale)
 ```
 
 **Vicino (Nearby):** testo → `BYTES` (JSON), foto → `FILE`, voce → `STREAM` (PCM 16 kHz).
@@ -82,13 +120,15 @@ app/src/main/java/com/walkietalkie/ptt/
 che un ritardo); chat, foto e presenza con QoS 1 (consegna garantita). La presenza usa
 messaggi "ci sono" periodici e il *last will* di MQTT per accorgersi di chi sparisce.
 
-Tecnologie: Kotlin, Jetpack Compose (Material 3), Play Services Nearby, Eclipse Paho MQTT,
-minSdk 26, targetSdk 35. I test (`app/src/test`) verificano protocollo, cifratura, codec e lo
-scambio via MQTT contro un broker locale (Moquette).
+Tecnologie: Kotlin, Jetpack Compose / Compose Multiplatform (Material 3), Play Services
+Nearby, Eclipse Paho MQTT, minSdk 26, targetSdk 35. I test (`shared/src/test`,
+`desktop/src/test`) verificano protocollo, cifratura, codec, lo scambio via MQTT contro un
+broker locale (Moquette) e il PC contro un telefono simulato che parla come l'app Android.
 
 ## Limiti noti (versione semplice)
 
-- L'app deve restare **aperta in primo piano** (niente servizio in background).
+- L'app Android deve restare **aperta in primo piano** (niente servizio in background).
+- Il PC raggiunge solo i telefoni con il collegamento **Internet** attivo.
 - Via internet la voce ha qualche decimo di secondo di ritardo e qualità "telefono".
 - Il broker pubblico predefinito è condiviso e può essere lento o non disponibile.
 - La cronologia della chat non viene salvata.
