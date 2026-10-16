@@ -21,4 +21,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.moquette:moquette-broker:0.17")
+    // Su Android PBKDF2/AES sono forniti da BouncyCastle: i test lo usano per comportarsi uguale.
+    testImplementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
 }

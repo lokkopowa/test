@@ -408,9 +408,9 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
                 val crypto = ChannelCrypto(settings.channel, settings.password)
                 InternetLink(settings.broker, crypto, "wptt-$myUid", internetListener)
             } catch (e: Exception) {
-                Log.w(TAG, "Broker non valido", e)
+                Log.w(TAG, "Collegamento internet non avviato", e)
                 _internetState.value = InternetLink.State.ERROR
-                addSystem("Indirizzo del server non valido: ${settings.broker}")
+                addSystem("Internet non avviato (${settings.broker}): ${e.javaClass.simpleName} ${e.message ?: ""}")
                 return@launch
             }
             if (!_started.value) return@launch
@@ -621,7 +621,11 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- utilità
 
-    private fun addSystem(text: String) = addItem(ChatItem.System(nextId(), now(), text))
+    /** Messaggio di servizio; se è identico all'ultimo non viene ripetuto. */
+    private fun addSystem(text: String) = _messages.update { list ->
+        val last = list.lastOrNull()
+        if (last is ChatItem.System && last.text == text) list else list + ChatItem.System(nextId(), now(), text)
+    }
 
     private fun addItem(item: ChatItem) = _messages.update { it + item }
 

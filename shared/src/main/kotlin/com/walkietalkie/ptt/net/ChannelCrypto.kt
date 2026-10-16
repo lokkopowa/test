@@ -22,7 +22,8 @@ class ChannelCrypto(channel: String, password: String) {
     private val key = SecretKeySpec(
         SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
             .generateSecret(
-                PBEKeySpec(password.toCharArray(), "walkieptt|key|$channel".toByteArray(), 10_000, 256)
+                // Il prefisso evita password vuote: BouncyCastle (Android) le rifiuta, Java (PC) no.
+                PBEKeySpec("walkieptt|$password".toCharArray(), "walkieptt|key|$channel".toByteArray(), 10_000, 256)
             ).encoded,
         "AES",
     )

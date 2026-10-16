@@ -104,7 +104,7 @@ class DesktopClient(
             InternetLink(settings.broker, ChannelCrypto(settings.channel, settings.password), "wptt-$uid", listener)
         } catch (e: Exception) {
             _linkState.value = InternetLink.State.ERROR
-            addSystem("Indirizzo del server non valido: ${settings.broker}")
+            addSystem("Collegamento non avviato (${settings.broker}): ${e.javaClass.simpleName} ${e.message ?: ""}")
             return
         }
         link = newLink
@@ -303,7 +303,11 @@ class DesktopClient(
 
     private fun newMid() = "$uid-${ids.incrementAndGet()}"
 
-    private fun addSystem(text: String) = addItem(ChatItem.System(ids.incrementAndGet(), now(), text))
+    /** Messaggio di servizio; se è identico all'ultimo non viene ripetuto. */
+    private fun addSystem(text: String) = _messages.update { list ->
+        val last = list.lastOrNull()
+        if (last is ChatItem.System && last.text == text) list else list + ChatItem.System(ids.incrementAndGet(), now(), text)
+    }
 
     private fun addItem(item: ChatItem) = _messages.update { it + item }
 

@@ -65,9 +65,10 @@ fun requiredPermissions(useNearby: Boolean): Array<String> = buildList {
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         add(Manifest.permission.NEARBY_WIFI_DEVICES)
-    } else {
-        add(Manifest.permission.ACCESS_FINE_LOCATION)
     }
+    // Nearby verifica la posizione anche su Android 13+ (errore 8034 MISSING_PERMISSION_ACCESS_COARSE_LOCATION).
+    add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    add(Manifest.permission.ACCESS_FINE_LOCATION)
 }.toTypedArray()
 
 private fun hasAll(context: Context, useNearby: Boolean) = requiredPermissions(useNearby).all {
@@ -108,7 +109,7 @@ fun SetupScreen(onStart: (Settings) -> Unit) {
     ) { result ->
         if (result.values.all { it }) go()
         else error = "Servono i permessi di microfono" +
-            (if (useNearby) " e dispositivi nelle vicinanze" else "") + " per funzionare."
+            (if (useNearby) ", dispositivi nelle vicinanze e posizione" else "") + " per funzionare."
     }
 
     Surface(Modifier.fillMaxSize()) {

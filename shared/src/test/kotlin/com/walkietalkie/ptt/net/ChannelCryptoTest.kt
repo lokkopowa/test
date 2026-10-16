@@ -5,9 +5,35 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.junit.Test
+import java.security.Security
 
 class ChannelCryptoTest {
+
+    @Test
+    fun emptyPasswordWorksWithAndroidCryptoProvider() {
+        // Su Android SecretKeyFactory "PBKDF2WithHmacSHA256" viene da BouncyCastle, che rifiuta
+        // le password vuote ("password empty"): era la causa di "Indirizzo del server non valido".
+        // Si toglie SunJCE perché altrimenti Java ripiega su di lui in silenzio (Android non lo ha).
+        val sunJce = Security.getProvider("SunJCE")
+        Security.removeProvider("SunJCE")
+        Security.insertProviderAt(BouncyCastleProvider(), 1)
+        try {
+            val a = ChannelCrypto("1", "")
+            val b = ChannelCrypto("1", "")
+            assertArrayEquals("ciao".toByteArray(), b.decrypt(a.encrypt("ciao".toByteArray())))
+            // E deve restare compatibile con il PC (che usa SunJCE): stessa chiave, stesso topic.
+            Security.insertProviderAt(sunJce, 2)
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+            val pc = ChannelCrypto("1", "")
+            assertEquals(a.topic, pc.topic)
+            assertArrayEquals("ciao".toByteArray(), pc.decrypt(a.encrypt("ciao".toByteArray())))
+        } finally {
+            Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
+            if (Security.getProvider("SunJCE") == null) Security.addProvider(sunJce)
+        }
+    }
 
     @Test
     fun sameChannelAndPasswordCanTalk() {
