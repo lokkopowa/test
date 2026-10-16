@@ -36,6 +36,20 @@ sealed class Packet {
         val ulaw: ByteArray,
     ) : Packet()
 
+    /**
+     * Allarme SOS. [lat]/[lon] sono null se la posizione non è disponibile;
+     * [accuracyM] è la precisione in metri, [fixAgeS] da quanti secondi è stata rilevata.
+     */
+    data class Sos(
+        override val uid: String,
+        override val nick: String,
+        val mid: String,
+        val lat: Double?,
+        val lon: Double?,
+        val accuracyM: Float?,
+        val fixAgeS: Int?,
+    ) : Packet()
+
     fun encode(): ByteArray {
         val bytes = ByteArrayOutputStream()
         DataOutputStream(bytes).use { out ->
@@ -47,6 +61,7 @@ sealed class Packet {
                     is Chat -> T_CHAT
                     is Photo -> T_PHOTO
                     is Audio -> T_AUDIO
+                    is Sos -> T_SOS
                 }
             )
             out.writeUTF(uid)
@@ -62,6 +77,17 @@ sealed class Packet {
                     out.writeUTF(mid)
                     out.writeInt(jpeg.size)
                     out.write(jpeg)
+                }
+                is Sos -> {
+                    out.writeUTF(mid)
+                    val hasFix = lat != null && lon != null
+                    out.writeBoolean(hasFix)
+                    if (hasFix) {
+                        out.writeDouble(lat!!)
+                        out.writeDouble(lon!!)
+                        out.writeFloat(accuracyM ?: -1f)
+                        out.writeInt(fixAgeS ?: -1)
+                    }
                 }
                 is Audio -> {
                     out.writeLong(sid)
@@ -82,6 +108,7 @@ sealed class Packet {
         private const val T_CHAT = 3
         private const val T_PHOTO = 4
         private const val T_AUDIO = 5
+        private const val T_SOS = 6
         private const val MAX_BLOB = 8 * 1024 * 1024
 
         /** Restituisce null per pacchetti malformati o di una versione sconosciuta. */
@@ -102,6 +129,18 @@ sealed class Packet {
                     T_CHAT -> Chat(uid, nick, input.readUTF(), input.readUTF())
                     T_PHOTO -> Photo(uid, nick, input.readUTF(), blob())
                     T_AUDIO -> Audio(uid, nick, input.readLong(), input.readInt(), input.readBoolean(), blob())
+                    T_SOS -> {
+                        val mid = input.readUTF()
+                        if (input.readBoolean()) {
+                            val lat = input.readDouble()
+                            val lon = input.readDouble()
+                            val acc = input.readFloat().takeIf { it >= 0 }
+                            val age = input.readInt().takeIf { it >= 0 }
+                            Sos(uid, nick, mid, lat, lon, acc, age)
+                        } else {
+                            Sos(uid, nick, mid, null, null, null, null)
+                        }
+                    }
                     else -> null
                 }
             }

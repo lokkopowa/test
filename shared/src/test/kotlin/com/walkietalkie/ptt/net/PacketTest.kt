@@ -35,6 +35,14 @@ class PacketTest {
     }
 
     @Test
+    fun sosRoundTrip() {
+        val withFix = Packet.Sos("u3", "Anna", "u3-5", 45.4642, 9.19, 12.5f, 3)
+        assertEquals(withFix, roundTrip(withFix))
+        val noFix = Packet.Sos("u3", "Anna", "u3-6", null, null, null, null)
+        assertEquals(noFix, roundTrip(noFix))
+    }
+
+    @Test
     fun garbageIsRejected() {
         assertNull(Packet.decode(byteArrayOf()))
         assertNull(Packet.decode(byteArrayOf(9, 9, 9)))

@@ -13,6 +13,9 @@ interface AudioIO {
     /** Un "altoparlante" per una trasmissione in arrivo; [onFinished] quando ha finito di suonare. */
     fun createPlayer(onFinished: () -> Unit): Player
 
+    /** Sirena di allarme per un SOS ricevuto. */
+    fun alarm() = Unit
+
     interface Player {
         /** PCM 16 kHz / 16 bit / mono, little endian. */
         fun write(pcm: ByteArray)

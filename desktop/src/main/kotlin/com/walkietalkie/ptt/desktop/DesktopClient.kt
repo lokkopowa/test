@@ -69,6 +69,10 @@ class DesktopClient(
     private val _transmitting = MutableStateFlow(false)
     val transmitting: StateFlow<Boolean> = _transmitting.asStateFlow()
 
+    /** SOS ricevuto e non ancora "visto". */
+    private val _sosAlert = MutableStateFlow<ChatItem.Sos?>(null)
+    val sosAlert: StateFlow<ChatItem.Sos?> = _sosAlert.asStateFlow()
+
     private val _keyCode = MutableStateFlow<String?>(null)
     val keyCode: StateFlow<String?> = _keyCode.asStateFlow()
 
@@ -153,6 +157,7 @@ class DesktopClient(
         _linkState.value = null
         _keyCode.value = null
         undecryptableWarned = false
+        _sosAlert.value = null
         photoDir.listFiles()?.forEach { it.delete() }
         _started.value = false
     }
@@ -208,6 +213,14 @@ class DesktopClient(
                         .onSuccess { addItem(ChatItem.Photo(ids.incrementAndGet(), now(), packet.nick, false, file)) }
                 }
                 is Packet.Audio -> receiveAudio(packet)
+                is Packet.Sos -> if (markSeen(packet.mid)) {
+                    val item = ChatItem.Sos(
+                        ids.incrementAndGet(), now(), packet.nick, false, packet.lat, packet.lon, packet.accuracyM,
+                    )
+                    addItem(item)
+                    _sosAlert.value = item
+                    audio.alarm()
+                }
                 is Packet.Bye -> Unit
             }
         }
@@ -277,6 +290,20 @@ class DesktopClient(
                 _peers.value.isEmpty() -> addSystem("Nessuno connesso: foto non inviata")
                 link?.publish(Packet.Photo(uid, nick, newMid(), jpeg)) != true -> addSystem("Non collegato: foto non inviata")
             }
+        }
+    }
+
+    fun dismissSos() {
+        _sosAlert.value = null
+    }
+
+    /** SOS dal PC: il PC non ha il GPS, quindi parte senza coordinate. */
+    fun sendSos() {
+        val mid = newMid()
+        markSeen(mid)
+        addItem(ChatItem.Sos(ids.incrementAndGet(), now(), nick, true, null, null, null))
+        if (link?.publish(Packet.Sos(uid, nick, mid, null, null, null, null)) != true) {
+            addSystem("Attenzione: non collegato, SOS non consegnato")
         }
     }
 

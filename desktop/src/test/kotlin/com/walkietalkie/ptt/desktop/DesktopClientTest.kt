@@ -61,6 +61,10 @@ class DesktopClientTest {
             onEnd = null
         }
         override fun createPlayer(onFinished: () -> Unit) = FakePlayer(onFinished).also { players += it }
+        @Volatile var alarms = 0
+        override fun alarm() {
+            alarms++
+        }
     }
 
     @Before
@@ -180,6 +184,28 @@ class DesktopClientTest {
         val photo = pc.messages.value.filterIsInstance<ChatItem.Photo>().single { !it.mine }
         assertTrue(photo.file.exists())
         assertEquals("Mario", photo.from)
+    }
+
+    @Test
+    fun sosBothWays() {
+        // SOS dal telefono con posizione: allarme, sirena, una sola volta anche se arriva doppio.
+        repeat(2) { phone.publish(Packet.Sos("phone", "Mario", "phone-sos-1", 45.4642, 9.19, 8f, 2)) }
+        waitFor { pc.sosAlert.value != null }
+        Thread.sleep(300)
+        val alert = pc.sosAlert.value!!
+        assertEquals("Mario", alert.from)
+        assertEquals("https://maps.google.com/?q=45.4642,9.19", alert.mapsUrl)
+        assertEquals(1, pc.messages.value.count { it is ChatItem.Sos })
+        assertEquals(1, audio.alarms)
+        pc.dismissSos()
+        assertEquals(null, pc.sosAlert.value)
+
+        // SOS dal PC: arriva al telefono, senza coordinate.
+        pc.sendSos()
+        waitFor { fromPc.any { it is Packet.Sos } }
+        val sent = fromPc.filterIsInstance<Packet.Sos>().single()
+        assertEquals("Ufficio", sent.nick)
+        assertEquals(null, sent.lat)
     }
 
     @Test

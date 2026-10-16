@@ -122,6 +122,32 @@ class JavaSoundAudio : AudioIO {
         }
     }
 
+    /** Sirena SOS: ~3 s di tono che sale e scende tra 650 e 1300 Hz. */
+    override fun alarm() {
+        thread(name = "pc-alarm", isDaemon = true) {
+            runCatching {
+                val seconds = 3.0
+                val samples = (SAMPLE_RATE * seconds).toInt()
+                val pcm = ByteArray(samples * 2)
+                var phase = 0.0
+                for (i in 0 until samples) {
+                    val t = i / SAMPLE_RATE.toDouble()
+                    val freq = 975 + 325 * sin(2 * PI * 1.2 * t)
+                    phase += 2 * PI * freq / SAMPLE_RATE
+                    val v = (9000 * sin(phase)).toInt()
+                    pcm[2 * i] = v.toByte()
+                    pcm[2 * i + 1] = (v shr 8).toByte()
+                }
+                AudioSystem.getSourceDataLine(FORMAT).use { line ->
+                    line.open(FORMAT)
+                    line.start()
+                    line.write(pcm, 0, pcm.size)
+                    line.drain()
+                }
+            }
+        }
+    }
+
     /** Il classico "bip" di fine trasmissione (120 ms a 880 Hz). */
     private fun beep() = runCatching {
         val samples = (SAMPLE_RATE * 0.12f).toInt()

@@ -34,6 +34,8 @@ class WalkieService : Service() {
     companion object {
         private const val CHANNEL_ONGOING = "walkie_ongoing"
         private const val CHANNEL_MESSAGES = "walkie_messages"
+        private const val CHANNEL_SOS = "walkie_sos"
+        private const val ID_SOS = 3
         private const val ID_ONGOING = 1
         private const val ID_MESSAGES = 2
         private const val ACTION_TALK = "com.walkietalkie.ptt.TALK"
@@ -140,6 +142,12 @@ class WalkieService : Service() {
             }
         )
         nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SOS, "SOS", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Allarmi SOS degli altri dispositivi del canale"
+                enableVibration(true)
+            }
+        )
+        nm.createNotificationChannel(
             NotificationChannel(CHANNEL_MESSAGES, "Messaggi e foto", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Messaggi e foto ricevuti mentre l'app è ridotta"
             }
@@ -184,6 +192,7 @@ class WalkieService : Service() {
         var lastPhoto: ChatItem.Photo? = null
         for (item in fresh) {
             when (item) {
+                is ChatItem.Sos -> if (!item.mine) notifySos(item)
                 is ChatItem.Text -> if (!item.mine) unread += "${item.from}: ${item.text}"
                 is ChatItem.Photo -> if (!item.mine) {
                     unread += "${item.from}: 📷 Foto"
@@ -209,6 +218,26 @@ class WalkieService : Service() {
             builder.setStyle(NotificationCompat.InboxStyle().also { s -> unread.takeLast(6).forEach(s::addLine) })
         }
         notify(ID_MESSAGES, builder.build())
+    }
+
+    private fun notifySos(sos: ChatItem.Sos) {
+        val where = if (sos.hasLocation) "Posizione: %.5f, %.5f".format(sos.lat, sos.lon) else "Posizione non disponibile"
+        val builder = NotificationCompat.Builder(this, CHANNEL_SOS)
+            .setSmallIcon(R.drawable.ic_stat_walkie)
+            .setContentTitle("🆘 SOS da ${sos.from}")
+            .setContentText(where)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setColor(0xFFFF3B4E.toInt())
+            .setAutoCancel(true)
+            .setContentIntent(openAppIntent())
+        sos.mapsUrl?.let { url ->
+            val map = PendingIntent.getActivity(
+                this, 3, Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)), PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, "Apri mappa", map)
+        }
+        notify(ID_SOS, builder.build())
     }
 
     /** Senza il permesso notifiche (Android 13+) il servizio funziona lo stesso, senza avvisi. */

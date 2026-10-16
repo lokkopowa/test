@@ -21,6 +21,8 @@ automaticamente. Inoltre foto e voce passano da internet solo se c'è qualcuno r
 | 🎙️ **PTT** | Tieni premuto il grande tasto per parlare, rilascia per ascoltare. Voce in tempo reale a tutto il canale, con il "bip" di fine trasmissione. |
 | 💬 **Minichat** | Messaggi di testo a tutto il canale. |
 | 📷 **Foto istantanee** | Scatta (o scegli dalla galleria): la foto viene ridimensionata, compressa e inviata subito. Tocca per vederla a schermo intero. All'uscita dal canale le foto vengono cancellate. |
+| 🆘 **SOS** | Tocca **5 volte in 3 secondi** il pulsante rosso SOS: tutti i dispositivi del canale ricevono un allarme a tutto schermo con sirena, vibrazione, il tuo nome e la **posizione GPS** (subito l'ultima nota, poi una più precisa appena il GPS la trova) con il pulsante "Apri mappa". |
+| 📴 **App ridotta** | Mentre sei in un canale una notifica fissa tiene l'app attiva anche ridotta o a schermo spento: ricevi voce, messaggi e foto (con notifica) e puoi **parlare dalla notifica** (pulsante "Parla"/"Stop", max 60 s). Al primo avvio l'app chiede di escluderla dal risparmio batteria: accetta, altrimenti alcuni telefoni (es. Samsung) la sospendono. |
 | 🔒 **Canali con password** | Solo chi ha lo stesso **canale + password** si sente. La password cifra tutto ciò che passa da internet. |
 
 ## Come si usa
@@ -42,6 +44,7 @@ stesso **canale + password** (il PC non ha il Bluetooth "Nearby" di Google, quin
 |---|---|
 | 🎙️ **PTT** | Tieni premuto il tasto rosso con il mouse **oppure la barra SPAZIO** (quando non stai scrivendo; premi **Esc** o clicca sulla chat per uscire dal campo messaggio). |
 | 💬 **Chat** | Scrivi e premi **Invio**. |
+| 🆘 **SOS** | Riceve gli SOS dei telefoni (allarme, sirena, "Apri mappa" nel browser) e può inviarli con 5 clic (senza posizione: il PC non ha il GPS). |
 | 📷 **Foto** | Pulsante 🖼️ per scegliere una o più immagini (vengono ridimensionate come sul telefono). Clic su una foto ricevuta per aprirla col visualizzatore del PC, da cui puoi salvarla. |
 
 **Installazione:** scarica l'installer dalla pagina *Releases* del repository (o dalla scheda
@@ -99,7 +102,10 @@ shared/    codice comune (Kotlin/JVM), usato da telefono e PC: stesso protocollo
 app/       app Android
 └── com/walkietalkie/ptt/
     ├── MainActivity.kt        // avvio, schermo sempre acceso
-    ├── WalkieViewModel.kt     // gestisce i due collegamenti, i telefoni connessi e i doppioni
+    ├── WalkieSession.kt       // gestisce i due collegamenti, i telefoni connessi, i doppioni e l'SOS
+    ├── WalkieService.kt       // servizio in primo piano: app ridotta, notifiche, PTT dalla notifica
+    ├── SosLocator.kt          // posizione GPS per l'SOS
+    ├── AlarmPlayer.kt         // sirena e vibrazione per l'SOS ricevuto
     ├── AudioEngine.kt         // microfono -> PCM 16 kHz e riproduzione su altoparlante
     ├── PhotoUtils.kt          // ridimensiona, raddrizza (EXIF) e comprime le foto
     └── ui/                    // schermate Jetpack Compose (impostazioni e canale)
@@ -127,7 +133,7 @@ broker locale (Moquette) e il PC contro un telefono simulato che parla come l'ap
 
 ## Limiti noti (versione semplice)
 
-- L'app Android deve restare **aperta in primo piano** (niente servizio in background).
+- Chiudendo l'app dalle "app recenti" si esce dal canale (ridotta invece continua a funzionare).
 - Il PC raggiunge solo i telefoni con il collegamento **Internet** attivo.
 - Via internet la voce ha qualche decimo di secondo di ritardo e qualità "telefono".
 - Il broker pubblico predefinito è condiviso e può essere lento o non disponibile.

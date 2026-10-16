@@ -36,7 +36,7 @@ fun main() = application {
             exitApplication()
         },
         title = "Walkie PTT",
-        state = rememberWindowState(width = 460.dp, height = 760.dp),
+        state = rememberWindowState(width = 480.dp, height = 860.dp),
         onPreviewKeyEvent = { event ->
             if (!started || typing || event.key != Key.Spacebar) return@Window false
             when (event.type) {

@@ -124,6 +124,12 @@ class WalkieSession(private val app: Application) {
     private val _keyCode = MutableStateFlow<String?>(null)
     val keyCode: StateFlow<String?> = _keyCode.asStateFlow()
 
+    /** SOS ricevuto e non ancora "visto": la schermata mostra l'allarme a tutto schermo. */
+    private val _sosAlert = MutableStateFlow<ChatItem.Sos?>(null)
+    val sosAlert: StateFlow<ChatItem.Sos?> = _sosAlert.asStateFlow()
+
+    private val alarm = AlarmPlayer(app)
+
     private val _nearbyOn = MutableStateFlow(false)
     val nearbyOn: StateFlow<Boolean> = _nearbyOn.asStateFlow()
 
@@ -207,6 +213,8 @@ class WalkieSession(private val app: Application) {
         _internetState.value = null
         _keyCode.value = null
         undecryptableWarned = false
+        _sosAlert.value = null
+        alarm.stop()
         nearby.stopAdvertising()
         nearby.stopDiscovery()
         nearby.stopAllEndpoints()
@@ -365,6 +373,13 @@ class WalkieSession(private val app: Application) {
         when (json.optString("t")) {
             "chat" -> receiveChat(nickOf(uid), json.optString("mid"), json.optString("text"))
             "photo" -> photoHeaders[json.optLong("pid")] = json.optString("mid")
+            "sos" -> receiveSos(
+                nickOf(uid),
+                json.optString("mid"),
+                json.takeIf { it.has("lat") }?.optDouble("lat"),
+                json.takeIf { it.has("lon") }?.optDouble("lon"),
+                json.takeIf { it.has("acc") }?.optDouble("acc")?.toFloat(),
+            )
         }
     }
 
@@ -483,6 +498,7 @@ class WalkieSession(private val app: Application) {
                 is Packet.Chat -> receiveChat(packet.nick, packet.mid, packet.text)
                 is Packet.Photo -> receiveInternetPhoto(packet)
                 is Packet.Audio -> receiveInternetAudio(packet)
+                is Packet.Sos -> receiveSos(packet.nick, packet.mid, packet.lat, packet.lon, packet.accuracyM)
                 is Packet.Bye -> Unit
             }
         }
@@ -542,6 +558,57 @@ class WalkieSession(private val app: Application) {
     private fun receiveChat(nick: String, mid: String, text: String) {
         if (mid.isNotEmpty() && !markSeen(mid)) return
         addItem(ChatItem.Text(nextId(), now(), nick, false, text))
+    }
+
+    private fun receiveSos(nick: String, mid: String, lat: Double?, lon: Double?, accuracy: Float?) {
+        if (mid.isNotEmpty() && !markSeen(mid)) return
+        val item = ChatItem.Sos(nextId(), now(), nick, false, lat, lon, accuracy)
+        addItem(item)
+        _sosAlert.value = item
+        alarm.start()
+    }
+
+    fun dismissSos() {
+        _sosAlert.value = null
+        alarm.stop()
+    }
+
+    /**
+     * SOS: parte subito con l'ultima posizione nota, poi (se il GPS ne trova una più fresca
+     * entro 20 s) ne manda un secondo con la posizione aggiornata.
+     */
+    fun sendSos() {
+        scope.launch(Dispatchers.IO) {
+            val last = SosLocator.lastKnown(app)
+            broadcastSos(last)
+            if (!SosLocator.hasPermission(app)) {
+                addSystem("Posizione non inviata: manca il permesso di localizzazione")
+                return@launch
+            }
+            val fresh = SosLocator.current(app, 20_000)
+            if (fresh != null && (last == null || fresh.time > last.time)) broadcastSos(fresh)
+            else if (last == null) addSystem("Posizione GPS non disponibile: SOS inviato senza coordinate")
+        }
+    }
+
+    private fun broadcastSos(loc: android.location.Location?) {
+        val mid = newMid()
+        markSeen(mid)
+        val acc = loc?.takeIf { it.hasAccuracy() }?.accuracy
+        val ageS = loc?.let { ((System.currentTimeMillis() - it.time) / 1000).toInt().coerceAtLeast(0) }
+        addItem(ChatItem.Sos(nextId(), now(), nickname, true, loc?.latitude, loc?.longitude, acc))
+        val targets = endpoints.keys.toList()
+        if (targets.isNotEmpty()) {
+            val json = JSONObject().put("t", "sos").put("mid", mid)
+            if (loc != null) {
+                json.put("lat", loc.latitude).put("lon", loc.longitude)
+                if (acc != null) json.put("acc", acc.toDouble())
+            }
+            nearby.sendPayload(targets, Payload.fromBytes(json.toString().toByteArray(Charsets.UTF_8)))
+        }
+        // L'SOS è piccolo e importante: via internet parte sempre.
+        internet?.publish(Packet.Sos(myUid, nickname, mid, loc?.latitude, loc?.longitude, acc, ageS))
+        if (targets.isEmpty() && internet?.isOnline != true) addSystem("Attenzione: nessun collegamento attivo, SOS non consegnato")
     }
 
     private fun markSeen(mid: String): Boolean = synchronized(seen) { seen.put(mid, true) == null }
