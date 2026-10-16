@@ -5,8 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.core.content.ContextCompat
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
 import com.google.android.gms.nearby.connection.ConnectionInfo
@@ -23,8 +22,10 @@ import com.walkietalkie.ptt.net.ChannelCrypto
 import com.walkietalkie.ptt.net.InternetLink
 import com.walkietalkie.ptt.net.Packet
 import com.walkietalkie.ptt.net.VoiceCodec
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,8 +66,11 @@ data class Peer(val uid: String, val nick: String, val nearby: Boolean, val inte
  *  - **Internet** (rete cellulare o Wi-Fi, tramite broker MQTT, contenuti cifrati)
  *      [Packet] con la voce compressa in µ-law 8 kHz
  * Se un telefono è raggiungibile in entrambi i modi, i doppioni vengono scartati.
+ *
+ * Appartiene all'applicazione (non alla schermata): mentre si è in un canale, [WalkieService]
+ * tiene vivo il processo in primo piano, così tutto continua a funzionare con l'app ridotta.
  */
-class WalkieViewModel(app: Application) : AndroidViewModel(app) {
+class WalkieSession(private val app: Application) {
 
     companion object {
         private const val TAG = "Walkie"
@@ -83,6 +87,7 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
         private const val NET_AUDIO_CHUNK = 800 // byte µ-law = 100 ms
     }
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val nearby = Nearby.getConnectionsClient(app)
     private var internet: InternetLink? = null
     private val audio = AudioEngine()
@@ -168,7 +173,10 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (settings.useInternet) startInternet()
 
-        housekeeping = viewModelScope.launch(Dispatchers.Default) {
+        // Servizio in primo piano: tiene attivi collegamenti, audio e microfono con l'app ridotta.
+        ContextCompat.startForegroundService(app, android.content.Intent(app, WalkieService::class.java))
+
+        housekeeping = scope.launch(Dispatchers.Default) {
             var sinceHeartbeat = 0L
             while (isActive) {
                 delay(1000)
@@ -215,13 +223,8 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
         _speaking.value = emptySet()
         _messages.value = emptyList()
         // Le foto sono "istantanee": all'uscita dal canale vengono cancellate.
-        PhotoUtils.photosDir(getApplication()).listFiles()?.forEach { it.delete() }
+        PhotoUtils.photosDir(app).listFiles()?.forEach { it.delete() }
         _started.value = false
-    }
-
-    override fun onCleared() {
-        stop()
-        super.onCleared()
     }
 
     // ---------------------------------------------------------------- telefoni connessi
@@ -266,7 +269,7 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- Nearby
 
-    private val serviceId get() = "${getApplication<Application>().packageName}.$channelId"
+    private val serviceId get() = "${app.packageName}.$channelId"
     private val endpointName get() = "${channelId.take(8)}|$myUid|$nickname"
 
     private data class Remote(val channel: String, val uid: String, val nick: String)
@@ -346,7 +349,7 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
             when (update.status) {
                 PayloadTransferUpdate.Status.SUCCESS -> {
                     incomingFiles.remove(update.payloadId)
-                    viewModelScope.launch(Dispatchers.IO) { saveNearbyPhoto(entry.first, entry.second) }
+                    scope.launch(Dispatchers.IO) { saveNearbyPhoto(entry.first, entry.second) }
                 }
                 PayloadTransferUpdate.Status.FAILURE,
                 PayloadTransferUpdate.Status.CANCELED -> {
@@ -382,7 +385,7 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
 
     @Suppress("DEPRECATION")
     private fun saveNearbyPhoto(endpointId: String, payload: Payload) {
-        val ctx = getApplication<Application>()
+        val ctx = app
         val nick = nickOf(endpoints[endpointId])
         val mid = photoHeaders.remove(payload.id)
         val file = payload.asFile() ?: return
@@ -412,7 +415,7 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startInternet() {
         _internetState.value = InternetLink.State.CONNECTING
-        viewModelScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             val link = try {
                 // PBKDF2 richiede qualche decina di ms: lontano dal thread principale.
                 val crypto = ChannelCrypto(settings.channel, settings.password)
@@ -487,7 +490,7 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun receiveInternetPhoto(p: Packet.Photo) {
         if (!markSeen(p.mid)) return
-        val dest = PhotoUtils.newPhotoFile(getApplication(), "recv")
+        val dest = PhotoUtils.newPhotoFile(app, "recv")
         runCatching { dest.writeBytes(p.jpeg) }
             .onSuccess { addItem(ChatItem.Photo(nextId(), now(), p.nick, false, dest)) }
             .onFailure { addSystem("Foto da ${p.nick} non ricevuta") }
@@ -562,9 +565,9 @@ class WalkieViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun sendPhoto(uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             val file: File = try {
-                PhotoUtils.compressForSending(getApplication(), uri)
+                PhotoUtils.compressForSending(app, uri)
             } catch (e: Exception) {
                 Log.w(TAG, "Compressione fallita", e)
                 null

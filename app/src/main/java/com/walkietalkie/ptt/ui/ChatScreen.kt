@@ -74,7 +74,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.walkietalkie.ptt.ChatItem
 import com.walkietalkie.ptt.PhotoUtils
-import com.walkietalkie.ptt.WalkieViewModel
+import com.walkietalkie.ptt.WalkieSession
 import com.walkietalkie.ptt.net.InternetLink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,7 +85,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(vm: WalkieViewModel) {
+fun ChatScreen(vm: WalkieSession) {
     val peers by vm.peers.collectAsStateWithLifecycle()
     val messages by vm.messages.collectAsStateWithLifecycle()
     val speaking by vm.speaking.collectAsStateWithLifecycle()

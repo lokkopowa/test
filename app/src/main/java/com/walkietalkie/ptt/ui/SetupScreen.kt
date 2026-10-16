@@ -1,6 +1,11 @@
 package com.walkietalkie.ptt.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -50,7 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import com.walkietalkie.ptt.Settings
+import com.walkietalkie.ptt.Settings as WalkieSettings
 
 const val DEFAULT_BROKER = "ssl://broker.hivemq.com:8883"
 
@@ -75,8 +80,33 @@ private fun hasAll(context: Context, useNearby: Boolean) = requiredPermissions(u
     ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
 }
 
+/** Facoltativo: senza, l'app funziona lo stesso ma non avvisa dei messaggi con l'app ridotta. */
+private fun optionalPermissions(): Array<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) arrayOf(Manifest.permission.POST_NOTIFICATIONS)
+    else emptyArray()
+
+private fun missingOptional(context: Context) = optionalPermissions().filter {
+    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+}
+
+/**
+ * Chiede (una volta) di escludere l'app dall'ottimizzazione batteria: altrimenti alcuni telefoni
+ * (es. Samsung) sospendono la rete dell'app ridotta e si smette di ricevere.
+ */
+@SuppressLint("BatteryLife") // app distribuita fuori dal Play Store; serve per un walkie talkie
+private fun askBatteryExemption(context: Context, prefs: android.content.SharedPreferences) {
+    val pm = context.getSystemService(PowerManager::class.java)
+    if (pm.isIgnoringBatteryOptimizations(context.packageName) || prefs.getBoolean("battery_asked", false)) return
+    prefs.edit { putBoolean("battery_asked", true) }
+    runCatching {
+        context.startActivity(
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+        )
+    }
+}
+
 @Composable
-fun SetupScreen(onStart: (Settings) -> Unit) {
+fun SetupScreen(onStart: (WalkieSettings) -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("setup", Context.MODE_PRIVATE) }
 
@@ -89,7 +119,7 @@ fun SetupScreen(onStart: (Settings) -> Unit) {
     var advanced by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
 
-    fun settings() = Settings(nick, channel, password, useNearby, useInternet, broker.ifBlank { DEFAULT_BROKER })
+    fun settings() = WalkieSettings(nick, channel, password, useNearby, useInternet, broker.ifBlank { DEFAULT_BROKER })
 
     fun go() {
         prefs.edit {
@@ -102,12 +132,13 @@ fun SetupScreen(onStart: (Settings) -> Unit) {
         }
         error = null
         onStart(settings())
+        askBatteryExemption(context, prefs)
     }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        if (result.values.all { it }) go()
+        if (requiredPermissions(useNearby).all { result[it] ?: hasAll(context, useNearby) }) go()
         else error = "Servono i permessi di microfono" +
             (if (useNearby) ", dispositivi nelle vicinanze e posizione" else "") + " per funzionare."
     }
@@ -190,7 +221,10 @@ fun SetupScreen(onStart: (Settings) -> Unit) {
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
-                    if (hasAll(context, useNearby)) go() else launcher.launch(requiredPermissions(useNearby))
+                    val missing = requiredPermissions(useNearby).filter {
+                        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                    } + missingOptional(context)
+                    if (missing.isEmpty()) go() else launcher.launch(missing.toTypedArray())
                 },
                 enabled = nick.isNotBlank() && channel.isNotBlank() && (useNearby || useInternet),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
