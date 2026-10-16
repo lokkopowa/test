@@ -50,7 +50,7 @@ fun main() = application {
             if (started) {
                 ChatScreen(client, onTypingChange = { typing = it })
             } else {
-                SetupScreen(onStart = client::start)
+                SetupScreen(client.appVersion, onStart = client::start)
             }
         }
     }

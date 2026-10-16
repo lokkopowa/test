@@ -2,7 +2,10 @@ package com.walkietalkie.ptt.desktop.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +19,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.SettingsInputAntenna
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -38,6 +43,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.walkietalkie.ptt.About
 import com.walkietalkie.ptt.desktop.DesktopSettings
 import java.net.InetAddress
 import java.util.prefs.Preferences
@@ -46,7 +52,7 @@ import java.util.prefs.Preferences
 const val DEFAULT_BROKER = "ssl://broker.hivemq.com:8883"
 
 @Composable
-fun SetupScreen(onStart: (DesktopSettings) -> Unit) {
+fun SetupScreen(version: String, onStart: (DesktopSettings) -> Unit) {
     val prefs = remember { Preferences.userRoot().node("walkieptt") }
     val defaultNick = remember { runCatching { InetAddress.getLocalHost().hostName }.getOrNull() ?: "PC" }
 
@@ -55,6 +61,8 @@ fun SetupScreen(onStart: (DesktopSettings) -> Unit) {
     var password by remember { mutableStateOf(prefs.get("password", "")) }
     var broker by remember { mutableStateOf(prefs.get("broker", DEFAULT_BROKER)) }
     var advanced by remember { mutableStateOf(false) }
+    // Il disclaimer compare da solo al primo avvio; poi dal pulsante "Informazioni".
+    var aboutOpen by remember { mutableStateOf(!prefs.getBoolean("about_seen", false)) }
 
     fun go() {
         prefs.put("nick", nick)
@@ -83,6 +91,11 @@ fun SetupScreen(onStart: (DesktopSettings) -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(Modifier.widthIn(max = 440.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    IconButton(onClick = { aboutOpen = true }, modifier = Modifier.glass(50.dp)) {
+                        Icon(Icons.Filled.Info, contentDescription = "Informazioni e disclaimer", tint = WalkieColors.Text)
+                    }
+                }
                 Box(contentAlignment = Alignment.Center) {
                     Box(
                         Modifier.size(132.dp).clip(CircleShape)
@@ -145,6 +158,20 @@ fun SetupScreen(onStart: (DesktopSettings) -> Unit) {
                 ) {
                     Text("ENTRA NEL CANALE", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                 }
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = { aboutOpen = true }) {
+                    Icon(Icons.Filled.Info, contentDescription = null, tint = WalkieColors.Muted, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Informazioni e disclaimer", color = WalkieColors.Muted)
+                }
+                Text("App creata da ${About.AUTHOR}", color = WalkieColors.Muted.copy(alpha = 0.7f), fontSize = 12.sp)
+            }
+        }
+        if (aboutOpen) {
+            AboutOverlay(version) {
+                aboutOpen = false
+                prefs.putBoolean("about_seen", true)
+                runCatching { prefs.flush() }
             }
         }
     }

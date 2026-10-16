@@ -1,5 +1,7 @@
 # Walkie PTT 📻
 
+*Creata da Gianluca Colotti.*
+
 App Android semplice che trasforma il telefono in un **walkie talkie push‑to‑talk**, con
 **minichat** e **scambio di foto istantanee**, più una **versione per PC** (Windows, macOS,
 Linux) per parlare dal computer con tutti i telefoni. Il telefono funziona in due modi, anche insieme:
@@ -23,6 +25,8 @@ automaticamente. Inoltre foto e voce passano da internet solo se c'è qualcuno r
 | 📷 **Foto istantanee** | Scatta (o scegli dalla galleria): la foto viene ridimensionata, compressa e inviata subito. Tocca per vederla a schermo intero. All'uscita dal canale le foto vengono cancellate. |
 | 🆘 **SOS** | Tocca **5 volte in 3 secondi** il pulsante rosso SOS: tutti i dispositivi del canale ricevono un allarme a tutto schermo con sirena, vibrazione, il tuo nome e la **posizione GPS** (subito l'ultima nota, poi una più precisa appena il GPS la trova) con il pulsante "Apri mappa". |
 | 📴 **App ridotta** | Mentre sei in un canale una notifica fissa tiene l'app attiva anche ridotta o a schermo spento: ricevi voce, messaggi e foto (con notifica) e puoi **parlare dalla notifica** (pulsante "Parla"/"Stop", max 60 s). Al primo avvio l'app chiede di escluderla dal risparmio batteria: accetta, altrimenti alcuni telefoni (es. Samsung) la sospendono. |
+| 🔊 **Suoni da radio** | Impostazioni (⚙️) → Suoni: **selettiva a 5 toni ZVEI/CCIR** (con codice a 5 cifre) o chirp/bip all'inizio di ogni trasmissione in arrivo, **fruscio di squelch**/roger beep alla fine, tono "talk permit" quando premi il tasto, e **suoneria SOS** (sirena bitonale, wail, yelp, sveglia del telefono o una suoneria a scelta). Ogni suono ha l'anteprima ▶. |
+| ℹ️ **Informazioni e disclaimer** | Dalla schermata iniziale: autore, disclaimer completo e regole di buon senso (compare anche al primo avvio). |
 | 🔒 **Canali con password** | Solo chi ha lo stesso **canale + password** si sente. La password cifra tutto ciò che passa da internet. |
 
 ## Come si usa
@@ -92,6 +96,7 @@ Creando un tag `v1.0.0` (o simile) li pubblica anche in una *Release*.
 ```
 shared/    codice comune (Kotlin/JVM), usato da telefono e PC: stesso protocollo garantito
 └── com/walkietalkie/ptt/
+    ├── About.kt               // autore, disclaimer e regole di buon senso (stesso testo ovunque)
     ├── ChatItem.kt            // modello dei messaggi
     └── net/
         ├── InternetLink.kt    // client MQTT (Eclipse Paho) con riconnessione automatica
@@ -106,6 +111,7 @@ app/       app Android
     ├── WalkieService.kt       // servizio in primo piano: app ridotta, notifiche, PTT dalla notifica
     ├── SosLocator.kt          // posizione GPS per l'SOS
     ├── AlarmPlayer.kt         // sirena e vibrazione per l'SOS ricevuto
+    ├── sound/                 // suoni sintetizzati (selettive, squelch, sirene) e loro impostazioni
     ├── AudioEngine.kt         // microfono -> PCM 16 kHz e riproduzione su altoparlante
     ├── PhotoUtils.kt          // ridimensiona, raddrizza (EXIF) e comprime le foto
     └── ui/                    // schermate Jetpack Compose (impostazioni e canale)

@@ -22,6 +22,8 @@ import com.walkietalkie.ptt.net.ChannelCrypto
 import com.walkietalkie.ptt.net.InternetLink
 import com.walkietalkie.ptt.net.Packet
 import com.walkietalkie.ptt.net.VoiceCodec
+import com.walkietalkie.ptt.sound.SoundSettings
+import com.walkietalkie.ptt.sound.TonePlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -128,7 +130,9 @@ class WalkieSession(private val app: Application) {
     private val _sosAlert = MutableStateFlow<ChatItem.Sos?>(null)
     val sosAlert: StateFlow<ChatItem.Sos?> = _sosAlert.asStateFlow()
 
-    private val alarm = AlarmPlayer(app)
+    /** Suoni scelti in Impostazioni (selettiva, fine trasmissione, conferma PTT, suoneria SOS). */
+    val sounds = SoundSettings(app)
+    private val alarm = AlarmPlayer(app, sounds)
 
     private val _nearbyOn = MutableStateFlow(false)
     val nearbyOn: StateFlow<Boolean> = _nearbyOn.asStateFlow()
@@ -392,7 +396,7 @@ class WalkieSession(private val app: Application) {
             return
         }
         _speaking.update { it + nick }
-        audio.play(input) {
+        audio.play(input, startTone = sounds.startPcm(), endTone = sounds.endPcm()) {
             audioSessions[sid] = SESSION_ENDED
             _speaking.update { it - nick }
         }
@@ -525,7 +529,12 @@ class WalkieSession(private val app: Application) {
             netStreams[p.sid] = stream
             val nick = p.nick
             _speaking.update { it + nick }
-            audio.play(ParcelFileDescriptor.AutoCloseInputStream(pipe[0]), NET_AUDIO_PREBUFFER_MS) {
+            audio.play(
+                ParcelFileDescriptor.AutoCloseInputStream(pipe[0]),
+                NET_AUDIO_PREBUFFER_MS,
+                startTone = sounds.startPcm(),
+                endTone = sounds.endPcm(),
+            ) {
                 _speaking.update { it - nick }
             }
         }
@@ -666,6 +675,7 @@ class WalkieSession(private val app: Application) {
             addSystem("Nessuno in ascolto sul canale")
             return
         }
+        TonePlayer.play(sounds.pttPcm()) // "talk permit": puoi parlare
         val sid = Random.nextLong()
         val targets = endpoints.keys.toList()
         val net = internet?.takeIf { internetNeeded() }

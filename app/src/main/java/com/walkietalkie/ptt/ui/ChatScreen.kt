@@ -42,6 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -88,7 +89,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun ChatScreen(vm: WalkieSession) {
+fun ChatScreen(vm: WalkieSession, onOpenSettings: () -> Unit) {
     val peers by vm.peers.collectAsStateWithLifecycle()
     val messages by vm.messages.collectAsStateWithLifecycle()
     val speaking by vm.speaking.collectAsStateWithLifecycle()
@@ -101,7 +102,7 @@ fun ChatScreen(vm: WalkieSession) {
 
     WalkieBackground {
         Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-            Header(vm.channelName, peers.values.toList(), speaking, nearbyOn, internetState, keyCode, onExit = vm::stop)
+            Header(vm.channelName, peers.values.toList(), speaking, nearbyOn, internetState, keyCode, onOpenSettings, onExit = vm::stop)
 
             AnimatedVisibility(
                 visible = speaking.isNotEmpty(),
@@ -138,6 +139,7 @@ private fun Header(
     nearbyOn: Boolean,
     internetState: InternetLink.State?,
     keyCode: String?,
+    onOpenSettings: () -> Unit,
     onExit: () -> Unit,
 ) {
     Column(Modifier.padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)) {
@@ -146,6 +148,10 @@ private fun Header(
                 Text("CANALE", color = WalkieColors.Muted, fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
                 Text(channel, color = WalkieColors.Text, fontSize = 26.sp, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            IconButton(onClick = onOpenSettings, modifier = Modifier.glass(50.dp)) {
+                Icon(Icons.Filled.Settings, contentDescription = "Impostazioni suoni", tint = WalkieColors.Text)
+            }
+            Spacer(Modifier.width(8.dp))
             IconButton(onClick = onExit, modifier = Modifier.glass(50.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Esci dal canale", tint = WalkieColors.Text)
             }

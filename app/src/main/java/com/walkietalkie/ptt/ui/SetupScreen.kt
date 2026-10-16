@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.IconButton
+import com.walkietalkie.ptt.About
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -124,7 +128,7 @@ private fun askBatteryExemption(context: Context, prefs: android.content.SharedP
 }
 
 @Composable
-fun SetupScreen(onStart: (WalkieSettings) -> Unit) {
+fun SetupScreen(onStart: (WalkieSettings) -> Unit, onOpenSettings: () -> Unit, onOpenAbout: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("setup", Context.MODE_PRIVATE) }
 
@@ -186,6 +190,15 @@ fun SetupScreen(onStart: (WalkieSettings) -> Unit) {
                 .padding(horizontal = 20.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                IconButton(onClick = onOpenAbout, modifier = Modifier.glass(50.dp)) {
+                    Icon(Icons.Filled.Info, contentDescription = "Informazioni e disclaimer", tint = WalkieColors.Text)
+                }
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onOpenSettings, modifier = Modifier.glass(50.dp)) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Impostazioni suoni", tint = WalkieColors.Text)
+                }
+            }
             Box(contentAlignment = Alignment.Center) {
                 Box(
                     Modifier.size(132.dp).clip(CircleShape)
@@ -291,6 +304,13 @@ fun SetupScreen(onStart: (WalkieSettings) -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Text(it, color = WalkieColors.Red, textAlign = TextAlign.Center)
             }
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = onOpenAbout) {
+                Icon(Icons.Filled.Info, contentDescription = null, tint = WalkieColors.Muted, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Informazioni e disclaimer", color = WalkieColors.Muted)
+            }
+            Text("App creata da ${About.AUTHOR}", color = WalkieColors.Muted.copy(alpha = 0.7f), fontSize = 12.sp)
         }
     }
 }

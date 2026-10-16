@@ -3,11 +3,9 @@ package com.walkietalkie.ptt
 import android.annotation.SuppressLint
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
-import android.media.ToneGenerator
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
 import android.util.Log
@@ -80,7 +78,13 @@ class AudioEngine {
      * Riproduce un flusso PCM in arrivo finché il mittente non rilascia il tasto.
      * [prebufferMs] accumula un po' di audio prima di partire, per assorbire i ritardi della rete.
      */
-    fun play(input: InputStream, prebufferMs: Int = 0, onFinished: () -> Unit) {
+    fun play(
+        input: InputStream,
+        prebufferMs: Int = 0,
+        startTone: ByteArray = ByteArray(0),
+        endTone: ByteArray = ByteArray(0),
+        onFinished: () -> Unit,
+    ) {
         thread(name = "ptt-play") {
             val minBuf = AudioTrack.getMinBufferSize(
                 SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
@@ -113,11 +117,21 @@ class AudioEngine {
                     filled += n
                 }
                 track.play()
-                if (filled > 0) track.write(prebuffer, 0, filled)
+                var written = 0L
+                // La selettiva suona prima della voce, nella stessa traccia: l'ordine è garantito.
+                if (startTone.isNotEmpty()) written += track.write(startTone, 0, startTone.size)
+                if (filled > 0) written += track.write(prebuffer, 0, filled)
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
-                    if (n > 0) track.write(buf, 0, n)
+                    if (n > 0) written += track.write(buf, 0, n)
+                }
+                if (endTone.isNotEmpty()) written += track.write(endTone, 0, endTone.size)
+                // Aspetta che tutto sia uscito dall'altoparlante prima di chiudere la traccia.
+                val frames = written / 2
+                val deadline = System.currentTimeMillis() + 3_000
+                while (track.playbackHeadPosition < frames && System.currentTimeMillis() < deadline) {
+                    Thread.sleep(20)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Riproduzione interrotta", e)
@@ -125,19 +139,8 @@ class AudioEngine {
                 runCatching { track.stop() }
                 track.release()
                 runCatching { input.close() }
-                rogerBeep()
                 onFinished()
             }
-        }
-    }
-
-    /** Il classico "bip" di fine trasmissione. */
-    fun rogerBeep() {
-        runCatching {
-            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
-            Thread.sleep(150)
-            tone.release()
         }
     }
 }

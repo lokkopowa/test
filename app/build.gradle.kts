@@ -49,4 +49,6 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
     implementation(project(":shared"))
+
+    testImplementation("junit:junit:4.13.2")
 }
