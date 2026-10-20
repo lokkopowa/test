@@ -7,8 +7,10 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.util.Log
+import com.walkietalkie.ptt.sound.Preamp
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -50,6 +52,8 @@ class AudioEngine {
             )
             val audioSession = recorder.audioSessionId
             if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(audioSession)?.enabled = true
+            // Livella la voce di chi parla piano o lontano dal telefono (anche per chi ascolta dal PC).
+            if (AutomaticGainControl.isAvailable()) AutomaticGainControl.create(audioSession)?.enabled = true
             if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(audioSession)?.enabled = true
 
             val buf = ByteArray(FRAME_BYTES)
@@ -83,6 +87,7 @@ class AudioEngine {
         prebufferMs: Int = 0,
         startTone: ByteArray = ByteArray(0),
         endTone: ByteArray = ByteArray(0),
+        voiceGain: () -> Float = { 1f },
         onFinished: () -> Unit,
     ) {
         thread(name = "ptt-play") {
@@ -120,11 +125,27 @@ class AudioEngine {
                 var written = 0L
                 // La selettiva suona prima della voce, nella stessa traccia: l'ordine è garantito.
                 if (startTone.isNotEmpty()) written += track.write(startTone, 0, startTone.size)
-                if (filled > 0) written += track.write(prebuffer, 0, filled)
+                var carry = -1 // un byte rimasto a metà campione dalla lettura precedente
+                if (filled > 0) {
+                    val even = filled - filled % 2
+                    if (filled % 2 == 1) carry = prebuffer[filled - 1].toInt() and 0xFF
+                    Preamp.apply(prebuffer, even, voiceGain())
+                    written += track.write(prebuffer, 0, even)
+                }
                 while (true) {
-                    val n = input.read(buf)
+                    var n = input.read(buf, if (carry >= 0) 1 else 0, buf.size - (if (carry >= 0) 1 else 0))
                     if (n < 0) break
-                    if (n > 0) written += track.write(buf, 0, n)
+                    if (carry >= 0) {
+                        buf[0] = carry.toByte()
+                        n += 1
+                        carry = -1
+                    }
+                    // La preamplificazione lavora su campioni interi (2 byte): un byte spaiato passa alla volta dopo.
+                    if (n % 2 == 1) carry = buf[--n].toInt() and 0xFF
+                    if (n > 0) {
+                        Preamp.apply(buf, n, voiceGain())
+                        written += track.write(buf, 0, n)
+                    }
                 }
                 if (endTone.isNotEmpty()) written += track.write(endTone, 0, endTone.size)
                 // Aspetta che tutto sia uscito dall'altoparlante prima di chiudere la traccia.

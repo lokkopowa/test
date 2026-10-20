@@ -396,7 +396,7 @@ class WalkieSession(private val app: Application) {
             return
         }
         _speaking.update { it + nick }
-        audio.play(input, startTone = sounds.startPcm(), endTone = sounds.endPcm()) {
+        audio.play(input, startTone = sounds.startPcm(), endTone = sounds.endPcm(), voiceGain = sounds::voiceGain) {
             audioSessions[sid] = SESSION_ENDED
             _speaking.update { it - nick }
         }
@@ -534,6 +534,7 @@ class WalkieSession(private val app: Application) {
                 NET_AUDIO_PREBUFFER_MS,
                 startTone = sounds.startPcm(),
                 endTone = sounds.endPcm(),
+                voiceGain = sounds::voiceGain,
             ) {
                 _speaking.update { it - nick }
             }

@@ -20,6 +20,10 @@ data class Sounds(
     val sos: SosSound = SosSound.BITONAL,
     val sosCustomUri: String? = null,
     val sosCustomTitle: String? = null,
+    /** Preamplificazione della voce in arrivo, 0..[Preamp.MAX_DB] dB. */
+    val voiceGainDb: Float = 6f,
+    /** Volume di selettive, bip di fine e talk permit, 0..1. */
+    val toneVolume: Float = 0.8f,
 )
 
 class SoundSettings(context: Context) {
@@ -41,12 +45,20 @@ class SoundSettings(context: Context) {
             putString("sos", next.sos.name)
             putString("sos_uri", next.sosCustomUri)
             putString("sos_title", next.sosCustomTitle)
+            putFloat("voice_gain_db", next.voiceGainDb)
+            putFloat("tone_volume", next.toneVolume)
         }
     }
 
-    fun startPcm(): ByteArray = ToneLibrary.toBytes(ToneLibrary.start(current.start, current.selectiveCode))
-    fun endPcm(): ByteArray = ToneLibrary.toBytes(ToneLibrary.end(current.end))
-    fun pttPcm(): ByteArray = ToneLibrary.toBytes(ToneLibrary.ptt(current.ptt))
+    fun startPcm(): ByteArray = tone(ToneLibrary.start(current.start, current.selectiveCode))
+    fun endPcm(): ByteArray = tone(ToneLibrary.end(current.end))
+    fun pttPcm(): ByteArray = tone(ToneLibrary.ptt(current.ptt))
+
+    /** Un suono al volume scelto per selettive e bip. */
+    fun tone(pcm: ShortArray): ByteArray = ToneLibrary.toBytes(Preamp.scale(pcm, current.toneVolume))
+
+    /** Letto a ogni pezzetto di voce: spostando il cursore il volume cambia subito. */
+    fun voiceGain(): Float = Preamp.dbToGain(current.voiceGainDb)
     val sosCustomUri: Uri? get() = current.sosCustomUri?.let(Uri::parse)
 
     private fun load(): Sounds {
@@ -59,6 +71,8 @@ class SoundSettings(context: Context) {
             sos = enumOr(prefs.getString("sos", null), d.sos),
             sosCustomUri = prefs.getString("sos_uri", null),
             sosCustomTitle = prefs.getString("sos_title", null),
+            voiceGainDb = prefs.getFloat("voice_gain_db", d.voiceGainDb).coerceIn(0f, Preamp.MAX_DB),
+            toneVolume = prefs.getFloat("tone_volume", d.toneVolume).coerceIn(0f, 1f),
         )
     }
 

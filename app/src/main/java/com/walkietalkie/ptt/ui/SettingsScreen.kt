@@ -37,6 +37,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -55,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.walkietalkie.ptt.sound.Preamp
 import com.walkietalkie.ptt.sound.SoundSettings
 import com.walkietalkie.ptt.sound.ToneLibrary
 import com.walkietalkie.ptt.sound.ToneLibrary.EndTone
@@ -135,6 +138,40 @@ fun SettingsScreen(settings: SoundSettings, onBack: () -> Unit) {
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                SettingsCard("VOLUME", "Regola quanto forte senti gli altri e i segnali radio") {
+                    SliderRow(
+                        title = "Preamplificazione voce",
+                        valueLabel = if (sounds.voiceGainDb < 0.5f) "spenta" else "+%.0f dB".format(sounds.voiceGainDb),
+                        hint = "Alza la voce di chi parla se arriva bassa. Un limitatore evita la distorsione.",
+                        value = sounds.voiceGainDb,
+                        range = 0f..Preamp.MAX_DB,
+                        steps = Preamp.MAX_DB.toInt() - 1,
+                        onChange = { db -> settings.update { it.copy(voiceGainDb = db) } },
+                        onPreview = null,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    SliderRow(
+                        title = "Volume selettive e bip",
+                        valueLabel = "${(sounds.toneVolume * 100).toInt()}%",
+                        hint = "Selettiva, fine trasmissione e talk permit. La sirena SOS resta sempre al massimo.",
+                        value = sounds.toneVolume,
+                        range = 0f..1f,
+                        steps = 19,
+                        onChange = { v -> settings.update { it.copy(toneVolume = v) } },
+                        onPreview = {
+                            stopPreviews()
+                            TonePlayer.play(
+                                settings.tone(
+                                    ToneLibrary.concat(
+                                        ToneLibrary.start(sounds.start, sounds.selectiveCode),
+                                        ToneLibrary.end(sounds.end),
+                                    )
+                                )
+                            )
+                        },
+                    )
+                }
+
                 SettingsCard(
                     "SELETTIVA IN ARRIVO",
                     "Suona quando qualcuno inizia a parlare, prima della sua voce",
@@ -145,7 +182,7 @@ fun SettingsScreen(settings: SoundSettings, onBack: () -> Unit) {
                             onSelect = { settings.update { it.copy(start = tone) } },
                             onPreview = if (tone == StartTone.NONE) null else ({
                                 stopPreviews()
-                                TonePlayer.play(ToneLibrary.toBytes(ToneLibrary.start(tone, sounds.selectiveCode)))
+                                TonePlayer.play(settings.tone(ToneLibrary.start(tone, sounds.selectiveCode)))
                             }),
                         )
                     }
@@ -176,7 +213,7 @@ fun SettingsScreen(settings: SoundSettings, onBack: () -> Unit) {
                             onSelect = { settings.update { it.copy(end = tone) } },
                             onPreview = if (tone == EndTone.NONE) null else ({
                                 stopPreviews()
-                                TonePlayer.play(ToneLibrary.toBytes(ToneLibrary.end(tone)))
+                                TonePlayer.play(settings.tone(ToneLibrary.end(tone)))
                             }),
                         )
                     }
@@ -189,7 +226,7 @@ fun SettingsScreen(settings: SoundSettings, onBack: () -> Unit) {
                             onSelect = { settings.update { it.copy(ptt = tone) } },
                             onPreview = if (tone == PttTone.NONE) null else ({
                                 stopPreviews()
-                                TonePlayer.play(ToneLibrary.toBytes(ToneLibrary.ptt(tone)))
+                                TonePlayer.play(settings.tone(ToneLibrary.ptt(tone)))
                             }),
                         )
                     }
@@ -221,6 +258,48 @@ fun SettingsScreen(settings: SoundSettings, onBack: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun SliderRow(
+    title: String,
+    valueLabel: String,
+    hint: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onChange: (Float) -> Unit,
+    onPreview: (() -> Unit)?,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = WalkieColors.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Text(valueLabel, color = WalkieColors.Orange, fontWeight = FontWeight.Black, fontSize = 15.sp)
+            if (onPreview != null) {
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    Modifier.size(38.dp).glass(50.dp, strong = true).clickable(onClick = onPreview),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = "Ascolta $title", tint = WalkieColors.Text)
+                }
+            }
+        }
+        Slider(
+            value = value,
+            onValueChange = onChange,
+            valueRange = range,
+            steps = steps,
+            colors = SliderDefaults.colors(
+                thumbColor = WalkieColors.Orange,
+                activeTrackColor = WalkieColors.Orange,
+                inactiveTrackColor = WalkieColors.Stroke,
+                activeTickColor = Color.Transparent,
+                inactiveTickColor = Color.Transparent,
+            ),
+        )
+        Text(hint, color = WalkieColors.Muted, fontSize = 12.sp)
     }
 }
 
