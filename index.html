@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b3d91">
+<title>Ronda Chisola 28</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="img/icon-192.png">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <strong>Ronda IMC Torino Smistamento</strong>
+    <small>Via Chisola 28 · <span id="clock">--:--</span></small>
+  </div>
+  <button id="btnShift" class="btn small">Avvia turno</button>
+</header>
+
+<!-- Avviso giro ronda (in-app) -->
+<div id="alarm" class="alarm hidden">
+  <div class="alarm-box">
+    <h2 id="alarmTitle">Inizio giro ronda</h2>
+    <p id="alarmText"></p>
+    <button class="btn big" data-alarm="start">Inizia giro ora</button>
+    <div class="row">
+      <button class="btn" data-alarm="10">+10 min</button>
+      <button class="btn" data-alarm="15">+15 min</button>
+      <button class="btn" data-alarm="30">+30 min</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <!-- ===================== GIRO ===================== -->
+  <section id="view-giro" class="view active">
+    <div class="card" id="nextRoundCard">
+      <div class="muted">Prossimo giro</div>
+      <div id="nextRound" class="big-text">—</div>
+      <div id="roundsList" class="rounds"></div>
+    </div>
+
+    <div class="card">
+      <div class="target-head">
+        <div>
+          <div class="muted">Destinazione</div>
+          <div id="targetName" class="big-text">—</div>
+        </div>
+        <div class="target-nav">
+          <button class="btn small" id="prevTag">◀</button>
+          <button class="btn small" id="nextTag">▶</button>
+        </div>
+      </div>
+
+      <div class="compass-wrap">
+        <div id="compass" class="compass">
+          <div id="arrow" class="arrow">➤</div>
+        </div>
+        <div>
+          <div id="distance" class="distance">— m</div>
+          <div id="gpsInfo" class="muted">GPS non attivo</div>
+          <button id="btnCompass" class="btn small">Attiva bussola</button>
+        </div>
+      </div>
+
+      <div id="nearBox" class="near hidden">
+        <strong>Sei vicino al TAG!</strong>
+        <img id="nearPhoto" alt="Posizione del TAG">
+      </div>
+
+      <div class="row">
+        <button id="btnBolla" class="btn big ok">✔ Bolla TAG (segna ora)</button>
+      </div>
+      <div class="row">
+        <a id="btnGmaps" class="btn" target="_blank" rel="noopener">Percorso a piedi su Google Maps</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="map"></div>
+      <div class="muted small-text">Linea gialla = da te al TAG · tratteggio = percorso del giro (1→2→3→4)</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Foto TAG</div>
+      <div id="photos" class="photos"></div>
+    </div>
+  </section>
+
+  <!-- ===================== SCHEDA ===================== -->
+  <section id="view-scheda" class="view">
+    <div class="sheet" id="sheet">
+      <table class="hdr">
+        <tr>
+          <td class="logo" rowspan="2"><div class="fs">SECURITY</div><div class="fs-sub">GRUPPO FERROVIE DELLO STATO ITALIANE</div></td>
+          <td class="title">REPORT DI FINE TURNO</td>
+        </tr>
+        <tr>
+          <td class="period">
+            Dalle ore <input data-f="dalleOre" type="time" class="line">
+            del giorno <input data-f="dalGiorno" class="line w5" placeholder="gg/mm">
+            alle ore <input data-f="alleOre" type="time" class="line">
+            del giorno <input data-f="alGiorno" class="line w5" placeholder="gg/mm">
+          </td>
+        </tr>
+      </table>
+
+      <table class="grid">
+        <tr><th colspan="8" class="center">IMC TORINO SMISTAMENTO – Via Chisola n. 28</th></tr>
+        <tr><th colspan="8" class="center">VERIFICA CANCELLI</th></tr>
+        <tr>
+          <th>DENOMINAZIONE</th><th>ORA</th><th colspan="2">CHIUSO</th>
+          <th>DENOMINAZIONE</th><th>ORA</th><th colspan="2">CHIUSO</th>
+        </tr>
+        <tbody id="gates"></tbody>
+      </table>
+
+      <table class="grid">
+        <tr><th class="w-name">Punti TAG</th><th colspan="6" class="center">Ora verifica</th></tr>
+        <tbody id="tagRows"></tbody>
+      </table>
+
+      <table class="grid">
+        <tr><th colspan="4" class="center">VERIFICA CAPANNONI - UFFICI (se trovate aperte, indicare quali)</th></tr>
+        <tbody id="sheds"></tbody>
+      </table>
+
+      <table class="grid">
+        <tr><th class="center">DESCRIZIONE SERVIZIO</th></tr>
+        <tr><td><textarea data-f="descrizione" rows="10" class="lined"></textarea></td></tr>
+      </table>
+
+      <table class="grid">
+        <tr><th>FF.OO. intervenuta</th><th>Ora Richiesta</th><th>Ora Intervento</th><th>Motivo</th></tr>
+        <tbody id="ffoo"></tbody>
+      </table>
+
+      <p class="note">Per qualsiasi nota di rilievo potrà essere utilizzato il retro del foglio con relativa FIRMA</p>
+      <table class="grid sign">
+        <tr><th>Nome agente</th><th>Firma Agente</th></tr>
+        <tr><td><input data-f="agente" class="cell"></td><td><input data-f="firma" class="cell"></td></tr>
+      </table>
+      <p class="foot">Informazione ad uso interno - Internal use information</p>
+    </div>
+    <div class="row no-print">
+      <button id="btnPrint" class="btn">Stampa / Salva PDF</button>
+      <button id="btnNewSheet" class="btn danger">Nuova scheda</button>
+    </div>
+    <p class="muted small-text no-print">Tocca una casella orario vuota per inserire l'ora attuale. Tocca SI/NO per selezionare. La scheda si salva da sola sul telefono.</p>
+  </section>
+
+  <!-- ===================== IMPOSTAZIONI ===================== -->
+  <section id="view-set" class="view">
+    <div class="card">
+      <h3>Notifiche</h3>
+      <p class="muted">Giri alle 21:00, 22:30, 00:00, 01:30 (ogni 90 minuti). Tieni l'app aperta con "Avvia turno": lo schermo resta acceso e l'avviso suona.</p>
+      <div class="row">
+        <button id="btnNotif" class="btn">Abilita notifiche</button>
+        <button id="btnTest" class="btn">Prova avviso</button>
+      </div>
+      <div class="row">
+        <button id="btnIcs" class="btn">Aggiungi sveglie al calendario (.ics)</button>
+      </div>
+      <p class="muted small-text">Il file .ics crea 4 promemoria ricorrenti ogni notte nel calendario del telefono: suonano anche ad app chiusa.</p>
+    </div>
+
+    <div class="card">
+      <h3>Posizione dei TAG</h3>
+      <p class="muted">Le posizioni iniziali sono indicative. Quando sei fisicamente davanti al TAG premi "Salva qui la mia posizione", oppure attiva "Sposta sulla mappa" e trascina il segnaposto.</p>
+      <div id="tagCal"></div>
+      <div class="row">
+        <button id="btnDrag" class="btn">Sposta sulla mappa: OFF</button>
+        <button id="btnCopy" class="btn">Copia coordinate</button>
+      </div>
+      <label class="muted">Distanza per mostrare la foto (metri)
+        <input id="nearRadius" type="number" min="5" max="200" class="cell">
+      </label>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-view="giro" class="active">🧭 Giro</button>
+  <button data-view="scheda">📋 Scheda</button>
+  <button data-view="set">⚙️ Impostazioni</button>
+</nav>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
