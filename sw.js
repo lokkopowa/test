@@ -1,6 +1,6 @@
-const CACHE = 'ronda-v4';
+const CACHE = 'ronda-v5';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json',
-  'img/tag1.jpg', 'img/tag1-vicino.jpg', 'img/tag2.jpg', 'img/tag2-vicino.jpg', 'img/tag3.jpg', 'img/tag4.jpg', 'img/tag4-vicino.jpg', 'img/icon-192.png', 'img/icon-512.png'];
+  'img/tag1.jpg', 'img/tag1-vicino.jpg', 'img/tag2.jpg', 'img/tag2-vicino.jpg', 'img/tag3.jpg', 'img/tag3-vicino.jpg', 'img/tag4.jpg', 'img/tag4-vicino.jpg', 'img/icon-192.png', 'img/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
