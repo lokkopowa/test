@@ -23,12 +23,24 @@ const FFOO_ROWS = 4;
 
 const store = {
   get(k, def) { try { const v = localStorage.getItem('ronda.' + k); return v ? JSON.parse(v) : def; } catch { return def; } },
-  set(k, v) { try { localStorage.setItem('ronda.' + k, JSON.stringify(v)); } catch {} },
+  set(k, v) { try { localStorage.setItem('ronda.' + k, JSON.stringify(v)); return true; } catch { return false; } },
 };
 
-let tags = DEFAULT_TAGS.map(t => ({ ...t, ...(store.get('tagpos', {})[t.id] || {}) }));
+// Elenco TAG: quello salvato dall'admin, altrimenti i predefiniti (+ eventuali posizioni calibrate con la versione precedente)
+let tags = store.get('tags', null) || DEFAULT_TAGS.map(t => ({ ...t, ...(store.get('tagpos', {})[t.id] || {}) }));
+const saveTags = () => store.set('tags', tags) || alert('Memoria del telefono piena: usa foto più piccole o elimina qualche foto.');
 let nearRadius = store.get('nearRadius', 30);
-let targetIdx = store.get('targetIdx', 0);
+let targetIdx = Math.min(store.get('targetIdx', 0), tags.length - 1);
+let compassOffset = store.get('compassOffset', 0);   // correzione bussola in gradi
+let locked = store.get('locked', true);              // posizioni TAG bloccate
+
+// Modalità admin (dura finché l'app resta aperta). Nel codice c'è solo l'hash SHA-256 della password.
+const ADMIN_HASH = 'e42461f344370e918af4832c8292e68abbbc47196a108f5b05d53b2975e24c17';
+let admin = sessionStorage.getItem('ronda.admin') === '1';
+async function sha256(txt) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 /* ================= UTILITY ================= */
 
@@ -89,31 +101,40 @@ function showView(v) {
 
 /* ================= MAPPA ================= */
 
-let map, userMarker, routeLine, tagMarkers = [], dragMode = false;
+let map, userMarker, routeLine, tagLayer, tourLine, tagMarkers = [], dragMode = false;
+const canEdit = () => admin && !locked;
 
 function initMap() {
   const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     { maxZoom: 20, maxNativeZoom: 19, attribution: 'Esri World Imagery' });
   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
-  map = L.map('map', { layers: [sat] }).setView([tags[0].lat, tags[0].lng], 17);
+  map = L.map('map', { layers: [sat] }).setView([45.0410, 7.6679], 17);
   L.control.layers({ 'Satellite': sat, 'Stradale': osm }).addTo(map);
+  tagLayer = L.layerGroup().addTo(map);
+  routeLine = L.polyline([], { color: '#ffcc00', weight: 5 }).addTo(map);
+  drawTags();
+  if (tags.length) map.fitBounds(L.latLngBounds(tags.map(t => [t.lat, t.lng])).pad(0.4));
+}
 
-  L.polyline(tags.map(t => [t.lat, t.lng]), { color: '#fff', dashArray: '6 8', weight: 3 }).addTo(map);
-  tags.forEach((t, i) => {
+// (Ri)disegna segnaposto e percorso del giro: chiamata a ogni modifica dell'elenco TAG
+function drawTags() {
+  tagLayer.clearLayers();
+  tourLine = L.polyline(tags.map(t => [t.lat, t.lng]), { color: '#fff', dashArray: '6 8', weight: 3 }).addTo(tagLayer);
+  tagMarkers = tags.map((t, i) => {
     const m = L.marker([t.lat, t.lng], {
       draggable: false,
       icon: L.divIcon({ className: '', html: `<div class="pin" style="background:#0b3d91;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-weight:700">${i + 1}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] }),
-    }).addTo(map).bindPopup(`<b>${t.name}</b><br><img src="${t.photo}" style="width:180px">`);
+    }).addTo(tagLayer).bindPopup(`<b>${t.name}</b>${t.photo ? `<br><img src="${t.photo}" style="width:180px">` : ''}`);
     m.on('click', () => setTarget(i));
     m.on('dragend', () => { const p = m.getLatLng(); saveTagPos(i, p.lat, p.lng); });
-    tagMarkers.push(m);
+    if (dragMode && canEdit()) m.dragging.enable();
+    return m;
   });
-  routeLine = L.polyline([], { color: '#ffcc00', weight: 5 }).addTo(map);
-  map.fitBounds(L.latLngBounds(tags.map(t => [t.lat, t.lng])).pad(0.4));
 }
 
 function refreshTagMarkers() {
+  tourLine?.setLatLngs(tags.map(t => [t.lat, t.lng]));
   tagMarkers.forEach((m, i) => {
     m.setLatLng([tags[i].lat, tags[i].lng]);
     m.getElement()?.querySelector('.pin')?.style.setProperty('background', i === targetIdx ? '#c0392b' : '#0b3d91');
@@ -137,15 +158,18 @@ function startGps() {
   }, e => { $('#gpsInfo').textContent = 'GPS: ' + e.message; }, { enableHighAccuracy: true, maximumAge: 2000 });
 }
 
-let compassHeading = null;
+let compassHeading = null, rawHeading = null;
 function onOrientation(e) {
   let h = null;
   if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;          // iOS
   else if (e.absolute && typeof e.alpha === 'number') h = (360 - e.alpha) % 360;          // Android
   if (h == null) return;
   const so = (screen.orientation && screen.orientation.angle) || 0;
-  compassHeading = heading = (h + so) % 360;
+  rawHeading = (h + so) % 360;
+  compassHeading = heading = (rawHeading + compassOffset + 360) % 360;
   updateArrow();
+  const hd = $('#headingNow');
+  if (hd) hd.textContent = `Direzione attuale: ${Math.round(heading)}°`;
 }
 async function enableCompass() {
   try {
@@ -163,7 +187,7 @@ async function enableCompass() {
 $('#btnCompass').addEventListener('click', enableCompass);
 
 function updateArrow() {
-  if (!pos) return;
+  if (!pos || !tags.length) return;
   const b = bearing(pos, tags[targetIdx]);
   const rel = heading == null ? b : b - heading;   // senza bussola: freccia rispetto al Nord (mappa)
   $('#arrow').style.transform = `rotate(${rel - 90}deg)`;
@@ -171,6 +195,7 @@ function updateArrow() {
 
 function updateGuide() {
   const t = tags[targetIdx];
+  if (!t) { $('#targetName').textContent = 'Nessun TAG configurato'; return; }
   $('#targetName').textContent = `${targetIdx + 1}. ${t.name}`;
   $('#btnGmaps').href = `https://www.google.com/maps/dir/?api=1&destination=${t.lat},${t.lng}&travelmode=walking`;
   document.querySelectorAll('.photos figure').forEach((f, i) => f.classList.toggle('current', i === targetIdx));
@@ -188,6 +213,7 @@ function updateGuide() {
 }
 
 function setTarget(i) {
+  if (!tags.length) return;
   targetIdx = (i + tags.length) % tags.length;
   store.set('targetIdx', targetIdx);
   updateGuide.vibrated = false;
@@ -197,15 +223,19 @@ $('#prevTag').addEventListener('click', () => setTarget(targetIdx - 1));
 $('#nextTag').addEventListener('click', () => setTarget(targetIdx + 1));
 
 function renderPhotos() {
-  $('#photos').innerHTML = tags.map((t, i) => `<figure data-i="${i}"><img src="${t.photo}" alt="${t.name}" loading="lazy"><figcaption>${i + 1}. ${t.name}</figcaption></figure>`).join('');
+  $('#photos').innerHTML = tags.map((t, i) => `<figure data-i="${i}"><img src="${t.photo || t.nearPhoto || 'img/icon-192.png'}" alt="${t.name}" loading="lazy"><figcaption>${i + 1}. ${t.name}</figcaption></figure>`).join('');
   document.querySelectorAll('.photos figure').forEach(f => f.addEventListener('click', () => setTarget(+f.dataset.i)));
 }
 
 /* ================= BOLLATURA ================= */
 
+// Le caselle orario sono legate all'id del TAG, così aggiungere/eliminare TAG non sposta gli orari
+const tagKey = (i, r) => `tag_${tags[i].id}_${r}`;
+
 $('#btnBolla').addEventListener('click', () => {
+  if (!tags.length) return;
   const r = Math.min(currentRound(), TAG_COLUMNS - 1);
-  const key = `tag_${targetIdx}_${r}`;
+  const key = tagKey(targetIdx, r);
   const sheet = store.get('sheet', {});
   if (sheet[key] && !confirm(`${tags[targetIdx].name} già bollato alle ${sheet[key]} per il giro ${r + 1}. Sovrascrivere?`)) return;
   sheet[key] = hhmm(new Date());
@@ -213,7 +243,7 @@ $('#btnBolla').addEventListener('click', () => {
   loadSheet();
   navigator.vibrate?.([100, 50, 100]);
   // Giro concluso quando tutti i TAG del giro hanno un orario
-  if (tags.every((_, i) => sheet[`tag_${i}_${r}`])) {
+  if (tags.every((_, i) => sheet[tagKey(i, r)])) {
     shift.done[r] = true; saveShift();
     alert(`Giro ${r + 1} completato!`);
     setTarget(0);
@@ -221,7 +251,7 @@ $('#btnBolla').addEventListener('click', () => {
     // passa al prossimo TAG non ancora bollato in questo giro
     for (let k = 1; k <= tags.length; k++) {
       const j = (targetIdx + k) % tags.length;
-      if (!sheet[`tag_${j}_${r}`]) { setTarget(j); break; }
+      if (!sheet[tagKey(j, r)]) { setTarget(j); break; }
     }
   }
   renderRounds();
@@ -275,7 +305,7 @@ function beep() {
 async function fireAlarm(i) {
   shift.alarmRound = i; saveShift();
   const title = `Giro ronda ${i + 1} di ${ROUND_COUNT}`;
-  const body = `Ore ${hhmm(roundDue(i))} – inizia il giro. Primo punto: ${tags[0].name}`;
+  const body = `Ore ${hhmm(roundDue(i))} – inizia il giro.` + (tags[0] ? ` Primo punto: ${tags[0].name}` : '');
   $('#alarmTitle').textContent = title;
   $('#alarmText').textContent = body;
   $('#alarm').classList.remove('hidden');
@@ -358,38 +388,202 @@ $('#btnIcs').addEventListener('click', () => {
   a.click();
 });
 
-function saveTagPos(i, lat, lng) {
-  tags[i].lat = lat; tags[i].lng = lng;
-  const all = store.get('tagpos', {});
-  all[tags[i].id] = { lat, lng };
-  store.set('tagpos', all);
-  renderCal(); updateGuide();
+/* ================= AMMINISTRAZIONE TAG ================= */
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Ogni modifica all'elenco TAG passa da qui: salva e aggiorna mappa, foto, scheda e pannello
+function tagsChanged() {
+  saveTags();
+  targetIdx = Math.max(0, Math.min(targetIdx, tags.length - 1));
+  drawTags(); renderPhotos(); buildTagRows(); loadSheet(); renderAdmin(); updateGuide();
 }
-function renderCal() {
-  $('#tagCal').innerHTML = tags.map((t, i) => `
-    <div class="tagcal">
-      <b>${i + 1}. ${t.name}</b>
-      <div class="coords">${t.lat.toFixed(6)}, ${t.lng.toFixed(6)}</div>
-      <div class="row"><button class="btn small" data-here="${i}">Salva qui la mia posizione</button></div>
+
+function saveTagPos(i, lat, lng) {
+  if (!canEdit()) return;
+  tags[i].lat = lat; tags[i].lng = lng;
+  tagsChanged();
+}
+
+// Riduce la foto scelta (max 800 px) per non riempire la memoria del telefono
+function readPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 800 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = img.width * k; c.height = img.height * k;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function renderAdmin() {
+  $('#adminLogin').classList.toggle('hidden', admin);
+  $('#adminPanel').classList.toggle('hidden', !admin);
+  $('#lockState').textContent = locked ? '🔒 Posizioni TAG bloccate' : '🔓 Posizioni TAG sbloccate (modificabili)';
+  $('#lockState').className = locked ? 'lock on' : 'lock off';
+  $('#btnLock').textContent = locked ? 'Sblocca per modificare' : 'Blocca posizioni';
+  $('#nearRadius').value = nearRadius;
+  $('#offsetNow').textContent = `Correzione attuale: ${compassOffset > 0 ? '+' : ''}${Math.round(compassOffset)}°`;
+  if (!canEdit() && dragMode) toggleDrag(false);
+
+  // elenco in sola lettura per tutti
+  $('#tagList').innerHTML = tags.map((t, i) =>
+    `<div class="tagcal"><b>${i + 1}. ${esc(t.name)}</b><div class="coords">${t.lat.toFixed(6)}, ${t.lng.toFixed(6)}</div></div>`).join('')
+    || '<p class="muted">Nessun TAG</p>';
+
+  const dis = canEdit() ? '' : 'disabled';
+  $('#tagEdit').innerHTML = tags.map((t, i) => `
+    <div class="tagcal" data-i="${i}">
+      <div class="row tight">
+        <b>${i + 1}.</b><input class="field" data-e="name" value="${esc(t.name)}" ${dis}>
+      </div>
+      <div class="row tight">
+        <label>Lat <input class="field" data-e="lat" inputmode="decimal" value="${t.lat.toFixed(6)}" ${dis}></label>
+        <label>Lng <input class="field" data-e="lng" inputmode="decimal" value="${t.lng.toFixed(6)}" ${dis}></label>
+      </div>
+      <div class="row tight">
+        <button class="btn small" data-a="here" ${dis}>📍 Usa mia posizione</button>
+        <button class="btn small" data-a="up" ${dis || (i === 0 ? 'disabled' : '')}>▲</button>
+        <button class="btn small" data-a="down" ${dis || (i === tags.length - 1 ? 'disabled' : '')}>▼</button>
+        <button class="btn small danger" data-a="del" ${dis}>Elimina</button>
+      </div>
+      <div class="row tight small-text">
+        <label class="file">Foto aerea <input type="file" accept="image/*" data-p="photo" ${dis}></label>
+        <label class="file">Foto ravvicinata <input type="file" accept="image/*" data-p="nearPhoto" ${dis}></label>
+      </div>
     </div>`).join('');
-  document.querySelectorAll('[data-here]').forEach(b => b.addEventListener('click', () => {
+}
+
+$('#tagEdit').addEventListener('change', async e => {
+  if (!canEdit()) return;
+  const box = e.target.closest('[data-i]'); if (!box) return;
+  const i = +box.dataset.i, f = e.target.dataset.e, p = e.target.dataset.p;
+  if (f === 'name') { tags[i].name = e.target.value.trim() || tags[i].name; }
+  else if (f === 'lat' || f === 'lng') {
+    const v = parseFloat(e.target.value.replace(',', '.'));
+    const ok = f === 'lat' ? Math.abs(v) <= 90 : Math.abs(v) <= 180;
+    if (isNaN(v) || !ok) { alert('Coordinata non valida'); return renderAdmin(); }
+    tags[i][f] = v;
+  } else if (p && e.target.files[0]) {
+    try { tags[i][p] = await readPhoto(e.target.files[0]); } catch { return alert('Impossibile leggere la foto'); }
+  } else return;
+  tagsChanged();
+});
+
+$('#tagEdit').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]');
+  if (!b || !canEdit()) return;
+  const i = +b.closest('[data-i]').dataset.i;
+  if (b.dataset.a === 'here') {
     if (!pos) return alert('Posizione GPS non ancora disponibile');
     if (pos.acc > 25 && !confirm(`Precisione GPS bassa (±${Math.round(pos.acc)} m). Salvare comunque?`)) return;
-    saveTagPos(+b.dataset.here, pos.lat, pos.lng);
-  }));
-}
-$('#btnDrag').addEventListener('click', () => {
-  dragMode = !dragMode;
+    tags[i].lat = pos.lat; tags[i].lng = pos.lng;
+  } else if (b.dataset.a === 'del') {
+    if (!confirm(`Eliminare "${tags[i].name}"?`)) return;
+    tags.splice(i, 1);
+  } else {
+    const j = b.dataset.a === 'up' ? i - 1 : i + 1;
+    [tags[i], tags[j]] = [tags[j], tags[i]];
+  }
+  tagsChanged();
+});
+
+$('#btnAddTag').addEventListener('click', () => {
+  if (!canEdit()) return;
+  const name = prompt('Nome del nuovo TAG:', 'TAG ');
+  if (!name || !name.trim()) return;
+  // posizione: GPS se disponibile, altrimenti centro della mappa (poi si sposta trascinandolo)
+  const c = pos || map.getCenter();
+  tags.push({ id: 't' + Date.now().toString(36), name: name.trim(), photo: null, nearPhoto: null, lat: c.lat, lng: c.lng });
+  tagsChanged();
+  alert(pos ? 'TAG aggiunto nella tua posizione attuale.' : 'TAG aggiunto al centro della mappa: attiva "Sposta sulla mappa" per posizionarlo.');
+});
+
+function toggleDrag(on) {
+  dragMode = on && canEdit();
   tagMarkers.forEach(m => dragMode ? m.dragging.enable() : m.dragging.disable());
   $('#btnDrag').textContent = 'Sposta sulla mappa: ' + (dragMode ? 'ON' : 'OFF');
-  if (dragMode) showView('giro');
+}
+$('#btnDrag').addEventListener('click', () => { toggleDrag(!dragMode); if (dragMode) showView('giro'); });
+
+$('#btnLock').addEventListener('click', () => {
+  if (!admin) return;
+  locked = !locked; store.set('locked', locked);
+  renderAdmin();
 });
-$('#btnCopy').addEventListener('click', async () => {
-  const txt = JSON.stringify(Object.fromEntries(tags.map(t => [t.id, { lat: +t.lat.toFixed(6), lng: +t.lng.toFixed(6) }])), null, 1);
-  try { await navigator.clipboard.writeText(txt); alert('Coordinate copiate'); } catch { prompt('Copia le coordinate:', txt); }
+
+$('#btnAdmin').addEventListener('click', async () => {
+  const pw = $('#adminPw').value;
+  $('#adminPw').value = '';
+  let ok = false;
+  try { ok = (await sha256(pw)) === ADMIN_HASH; } catch { alert('Accesso admin disponibile solo da connessione sicura (https)'); return; }
+  if (!ok) return alert('Password errata');
+  admin = true; sessionStorage.setItem('ronda.admin', '1');
+  renderAdmin();
 });
-$('#nearRadius').value = nearRadius;
-$('#nearRadius').addEventListener('change', e => { nearRadius = +e.target.value || 30; store.set('nearRadius', nearRadius); updateGuide(); });
+$('#adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnAdmin').click(); });
+$('#btnLogout').addEventListener('click', () => {
+  admin = false; sessionStorage.removeItem('ronda.admin');
+  locked = true; store.set('locked', true);   // uscendo si ribloccano sempre le posizioni
+  renderAdmin();
+});
+
+$('#nearRadius').addEventListener('change', e => {
+  if (!admin) return;
+  nearRadius = +e.target.value || 30; store.set('nearRadius', nearRadius); updateGuide();
+});
+
+// ----- Calibrazione bussola -----
+function setOffset(v) {
+  compassOffset = ((v + 540) % 360) - 180;   // tra -180 e +180
+  store.set('compassOffset', compassOffset);
+  if (rawHeading != null) heading = compassHeading = (rawHeading + compassOffset + 360) % 360;
+  renderAdmin(); updateArrow();
+}
+$('#btnCalTag').addEventListener('click', async () => {
+  if (!admin) return;
+  if (rawHeading == null) { await enableCompass(); return alert('Attiva la bussola e riprova (muovi il telefono a 8 per qualche secondo).'); }
+  if (!pos || !tags[targetIdx]) return alert('Serve la posizione GPS e un TAG selezionato nella schermata Giro.');
+  if (!confirm(`Punta la parte alta del telefono esattamente verso "${tags[targetIdx].name}" e premi OK.`)) return;
+  setOffset(bearing(pos, tags[targetIdx]) - rawHeading);
+  alert('Bussola calibrata');
+});
+$('#btnCalMinus').addEventListener('click', () => admin && setOffset(compassOffset - 5));
+$('#btnCalPlus').addEventListener('click', () => admin && setOffset(compassOffset + 5));
+$('#btnCalReset').addEventListener('click', () => admin && setOffset(0));
+
+// ----- Esporta / importa configurazione (per non perderla e passarla ad altri telefoni) -----
+$('#btnExport').addEventListener('click', () => {
+  const data = { versione: 1, tags, nearRadius, compassOffset };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
+  a.download = 'ronda-chisola-config.json';
+  a.click();
+});
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f || !canEdit()) return alert('Sblocca le posizioni per importare una configurazione');
+  try {
+    const data = JSON.parse(await f.text());
+    if (!Array.isArray(data.tags) || !data.tags.every(t => t.id && t.name && isFinite(t.lat) && isFinite(t.lng))) throw 0;
+    if (!confirm(`Sostituire i TAG attuali con i ${data.tags.length} del file?`)) return;
+    tags = data.tags;
+    if (isFinite(data.nearRadius)) { nearRadius = data.nearRadius; store.set('nearRadius', nearRadius); }
+    if (isFinite(data.compassOffset)) setOffset(data.compassOffset);
+    tagsChanged();
+  } catch { alert('File di configurazione non valido'); }
+});
+$('#btnResetTags').addEventListener('click', () => {
+  if (!canEdit() || !confirm('Ripristinare i 4 TAG predefiniti dell\'app? Le modifiche fatte su questo telefono andranno perse.')) return;
+  tags = DEFAULT_TAGS.map(t => ({ ...t }));
+  tagsChanged();
+});
 
 /* ================= SCHEDA ================= */
 
@@ -399,8 +593,7 @@ const tcell = k => `<td class="t"><input data-k="${k}" inputmode="numeric" class
 function buildSheet() {
   $('#gates').innerHTML = GATES.map((g, i) =>
     `<tr><td class="name">${g}</td>${tcell(`gate_${i}_a_ora`)}${yn(`gate_${i}_a`)}<td class="name">${g}</td>${tcell(`gate_${i}_b_ora`)}${yn(`gate_${i}_b`)}</tr>`).join('');
-  $('#tagRows').innerHTML = tags.map((t, i) =>
-    `<tr><td class="name"><b>${t.name}</b></td>${Array.from({ length: TAG_COLUMNS }, (_, c) => tcell(`tag_${i}_${c}`)).join('')}</tr>`).join('');
+  buildTagRows();
   $('#sheds').innerHTML = SHEDS.map((s, i) =>
     `<tr><td>${s}</td><td style="width:70px">chiusura</td>${yn(`shed_${i}`)}<td><input data-k="shed_${i}_note" class="cell"></td></tr>`).join('');
   // riga capannoni: nome | chiusura | SI | NO | note
@@ -430,6 +623,11 @@ function buildSheet() {
   });
 }
 
+function buildTagRows() {
+  $('#tagRows').innerHTML = tags.map((t, i) =>
+    `<tr><td class="name"><b>${t.name}</b></td>${Array.from({ length: TAG_COLUMNS }, (_, c) => tcell(tagKey(i, c))).join('')}</tr>`).join('');
+}
+
 function loadSheet() {
   let s = store.get('sheet', null);
   if (!s) {
@@ -456,7 +654,7 @@ $('#btnNewSheet').addEventListener('click', () => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 initMap();
 renderPhotos();
-renderCal();
+renderAdmin();
 buildSheet();
 loadSheet();
 startGps();

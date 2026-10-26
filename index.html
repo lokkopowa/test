@@ -168,17 +168,62 @@
       <p class="muted small-text">Il file .ics crea 4 promemoria ricorrenti ogni notte nel calendario del telefono: suonano anche ad app chiusa.</p>
     </div>
 
-    <div class="card">
-      <h3>Posizione dei TAG</h3>
-      <p class="muted">Le posizioni iniziali sono indicative. Quando sei fisicamente davanti al TAG premi "Salva qui la mia posizione", oppure attiva "Sposta sulla mappa" e trascina il segnaposto.</p>
-      <div id="tagCal"></div>
+    <div class="card" id="adminLogin">
+      <h3>TAG 🔒</h3>
+      <p class="muted">Le posizioni dei TAG sono bloccate. Solo l'amministratore può modificarle.</p>
+      <div id="tagList"></div>
       <div class="row">
-        <button id="btnDrag" class="btn">Sposta sulla mappa: OFF</button>
-        <button id="btnCopy" class="btn">Copia coordinate</button>
+        <input id="adminPw" type="password" class="field" placeholder="Password admin" autocomplete="off">
+        <button id="btnAdmin" class="btn">Accesso admin</button>
       </div>
-      <label class="muted">Distanza per mostrare la foto (metri)
-        <input id="nearRadius" type="number" min="5" max="200" class="cell">
-      </label>
+    </div>
+
+    <div id="adminPanel" class="hidden">
+      <div class="card admin">
+        <div class="target-head">
+          <h3>Modalità admin</h3>
+          <button id="btnLogout" class="btn small danger">Esci</button>
+        </div>
+        <div id="lockState" class="lock on"></div>
+        <div class="row"><button id="btnLock" class="btn"></button></div>
+        <p class="muted small-text">Uscendo dalla modalità admin le posizioni si ribloccano automaticamente.</p>
+      </div>
+
+      <div class="card admin">
+        <h3>Gestione TAG</h3>
+        <p class="muted small-text">Davanti al TAG premi "📍 Usa mia posizione", oppure scrivi le coordinate, oppure attiva "Sposta sulla mappa" e trascina il segnaposto.</p>
+        <div id="tagEdit"></div>
+        <div class="row">
+          <button id="btnAddTag" class="btn ok">+ Aggiungi TAG</button>
+          <button id="btnDrag" class="btn">Sposta sulla mappa: OFF</button>
+        </div>
+        <label class="muted">Distanza per mostrare la foto (metri)
+          <input id="nearRadius" type="number" min="5" max="200" class="field">
+        </label>
+      </div>
+
+      <div class="card admin">
+        <h3>Calibrazione bussola</h3>
+        <p class="muted small-text">1) Muovi il telefono disegnando un 8 nell'aria per qualche secondo. 2) In "Giro" seleziona un TAG che vedi. 3) Punta la parte alta del telefono verso quel TAG e premi il pulsante.</p>
+        <div id="headingNow" class="muted">Direzione attuale: bussola non attiva</div>
+        <div id="offsetNow" class="muted"></div>
+        <div class="row"><button id="btnCalTag" class="btn">🧭 Calibra puntando il TAG selezionato</button></div>
+        <div class="row">
+          <button id="btnCalMinus" class="btn small">−5°</button>
+          <button id="btnCalReset" class="btn small">Azzera</button>
+          <button id="btnCalPlus" class="btn small">+5°</button>
+        </div>
+      </div>
+
+      <div class="card admin">
+        <h3>Backup configurazione</h3>
+        <p class="muted small-text">Salva un file con TAG, coordinate e foto: serve per non perderli e per caricarli sui telefoni dei colleghi.</p>
+        <div class="row">
+          <button id="btnExport" class="btn">Esporta file</button>
+          <label class="btn">Importa file<input id="importFile" type="file" accept="application/json,.json" hidden></label>
+        </div>
+        <div class="row"><button id="btnResetTags" class="btn danger">Ripristina TAG predefiniti</button></div>
+      </div>
     </div>
   </section>
 </main>

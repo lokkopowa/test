@@ -14,3 +14,8 @@ Per avvisi garantiti anche ad app chiusa: Impostazioni → **Aggiungi sveglie al
 
 ## Foto ravvicinate dei TAG
 Caricare le foto in `img/` (es. `img/tag1-vicino.jpg`) e impostare `nearPhoto` in `DEFAULT_TAGS` in `app.js`.
+
+## Modalità admin
+Impostazioni → password admin. Le posizioni dei TAG sono bloccate per tutti; l'admin può sbloccarle per:
+aggiungere/eliminare/riordinare TAG, modificare nome e coordinate, caricare foto, calibrare la bussola,
+esportare/importare la configurazione. Uscendo dalla modalità admin le posizioni si ribloccano.
