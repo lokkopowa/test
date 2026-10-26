@@ -6,7 +6,7 @@
 // photo     = foto aerea con la freccia
 // nearPhoto = foto ravvicinata del punto esatto (quando disponibile, es. img/tag1-vicino.jpg)
 const DEFAULT_TAGS = [
-  { id: 'tornio',      name: 'TAG Capannone tornio',     photo: 'img/tag1.jpg', nearPhoto: null, lat: 45.04190, lng: 7.66700 },
+  { id: 'tornio',      name: 'TAG Capannone tornio',     photo: 'img/tag1.jpg', nearPhoto: 'img/tag1-vicino.jpg', lat: 45.04190, lng: 7.66700 },
   { id: 'dor',         name: 'TAG Palazzina uffici DOR', photo: 'img/tag2.jpg', nearPhoto: 'img/tag2-vicino.jpg', lat: 45.04120, lng: 7.66840 },
   { id: 'spogliatoio', name: 'TAG Spogliatoio',          photo: 'img/tag3.jpg', nearPhoto: null, lat: 45.04030, lng: 7.66760 },
   { id: 'diesel',      name: 'TAG Piazzale diesel',      photo: 'img/tag4.jpg', nearPhoto: 'img/tag4-vicino.jpg', lat: 45.03980, lng: 7.66640 },
