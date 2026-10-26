@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ronda Chisola</string>
+    <string name="title_activity_main">Ronda Chisola</string>
+    <string name="package_name">it.ronda.chisola</string>
+    <string name="custom_url_scheme">it.ronda.chisola</string>
+</resources>

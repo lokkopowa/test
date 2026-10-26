@@ -1,0 +1,8 @@
+{
+  "appId": "it.ronda.chisola",
+  "appName": "Ronda Chisola",
+  "webDir": "www",
+  "plugins": {
+    "LocalNotifications": { "smallIcon": "ic_stat_ronda", "iconColor": "#0b3d91" }
+  }
+}

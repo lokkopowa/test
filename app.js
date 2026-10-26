@@ -45,6 +45,10 @@ async function sha256(txt) {
 /* ================= UTILITY ================= */
 
 const $ = s => document.querySelector(s);
+
+// App Android (Capacitor): usa notifiche, condivisione e file nativi
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const Plug = NATIVE ? window.Capacitor.Plugins : {};
 const pad = n => String(n).padStart(2, '0');
 const hhmm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
 const ddmm = d => pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
@@ -68,7 +72,7 @@ function loadShift() {
   return s;
 }
 let shift = loadShift();
-const saveShift = () => store.set('shift', shift);
+const saveShift = () => { store.set('shift', shift); scheduleNative(); };
 
 function roundDue(i) {
   const d = new Date(shiftStart().getTime() + i * ROUND_EVERY_MIN * 60000);
@@ -391,7 +395,9 @@ const qsAction = new URLSearchParams(location.search).get('alarm');
 /* ================= TURNO / WAKE LOCK ================= */
 
 let wakeLock = null, shiftOn = false;
-async function requestWake() { try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {} }
+async function requestWake() {
+  try { if (NATIVE) await Plug.KeepAwake.keepAwake(); else wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+}
 $('#btnShift').addEventListener('click', async () => {
   shiftOn = !shiftOn;
   $('#btnShift').textContent = shiftOn ? 'Turno attivo ●' : 'Avvia turno';
@@ -401,18 +407,24 @@ $('#btnShift').addEventListener('click', async () => {
     await requestWake();
     if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
     enableCompass();
-  } else { wakeLock?.release(); wakeLock = null; }
+  } else { wakeLock?.release(); wakeLock = null; if (NATIVE) Plug.KeepAwake.allowSleep().catch(() => {}); }
 });
 document.addEventListener('visibilitychange', () => { if (shiftOn && document.visibilityState === 'visible') requestWake(); tick(); });
 
 /* ================= IMPOSTAZIONI ================= */
 
 $('#btnNotif').addEventListener('click', async () => {
+  if (NATIVE) return nativePermissions(true);
   if (!('Notification' in window)) return alert('Notifiche non supportate da questo browser. Installa l\'app sulla schermata Home.');
   const p = await Notification.requestPermission();
   alert(p === 'granted' ? 'Notifiche abilitate' : 'Notifiche non consentite');
 });
-$('#btnTest').addEventListener('click', () => { unlockAudio(); fireAlarm(currentRound()); });
+$('#btnTest').addEventListener('click', () => {
+  unlockAudio(); fireAlarm(currentRound());
+  if (NATIVE) Plug.LocalNotifications.schedule({ notifications: [{ id: 999, title: 'Prova avviso giro ronda', body: 'Se leggi questo, le notifiche funzionano anche ad app chiusa.',
+    schedule: { at: new Date(Date.now() + 15000), allowWhileIdle: true }, channelId: 'ronda', smallIcon: 'ic_stat_ronda' }] })
+    .then(() => toast('🔔 Tra 15 secondi arriva una notifica di prova: puoi anche chiudere l\'app'));
+});
 
 $('#btnIcs').addEventListener('click', () => {
   const start = shiftStart();
@@ -426,10 +438,7 @@ $('#btnIcs').addEventListener('click', () => {
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:Giro ronda ${i + 1}`, 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT');
   }
   lines.push('END:VCALENDAR');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([lines.join('\r\n')], { type: 'text/calendar' }));
-  a.download = 'giri-ronda-chisola.ics';
-  a.click();
+  downloadFiles([new File([lines.join('\r\n')], 'giri-ronda-chisola.ics', { type: 'text/calendar' })]);
 });
 
 /* ================= AMMINISTRAZIONE TAG ================= */
@@ -605,10 +614,7 @@ $('#btnCalReset').addEventListener('click', () => admin && setOffset(0));
 // ----- Esporta / importa configurazione (per non perderla e passarla ad altri telefoni) -----
 $('#btnExport').addEventListener('click', () => {
   const data = { versione: 1, tags, nearRadius, compassOffset };
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' }));
-  a.download = 'ronda-chisola-config.json';
-  a.click();
+  downloadFiles([new File([JSON.stringify(data, null, 1)], 'ronda-chisola-config.json', { type: 'application/json' })]);
 });
 $('#importFile').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = '';
@@ -900,7 +906,22 @@ async function buildJpgs() {
   return files;
 }
 
+// Nell'app Android i file si scrivono nella cache e si aprono con la condivisione (salva su Drive, invia, ecc.)
+function blobToBase64(blob) {
+  return new Promise((ok, ko) => { const fr = new FileReader(); fr.onload = () => ok(fr.result.split(',')[1]); fr.onerror = ko; fr.readAsDataURL(blob); });
+}
+async function nativeWrite(files) {
+  const uris = [];
+  for (const f of files) uris.push((await Plug.Filesystem.writeFile({ path: f.name, data: await blobToBase64(f), directory: 'CACHE' })).uri);
+  return uris;
+}
+
 function downloadFiles(files) {
+  if (NATIVE) {
+    nativeWrite(files).then(uris => Plug.Share.share({ title: files.map(f => f.name).join(', '), files: uris, dialogTitle: 'Salva o invia' }))
+      .catch(e => { if (!/cancel/i.test(e?.message || '')) toast('❌ Salvataggio non riuscito'); });
+    return;
+  }
   files.forEach((f, i) => setTimeout(() => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click();
   }, i * 400));
@@ -915,6 +936,17 @@ async function sendSheets() {
   toast('⏳ Preparo le schede in JPG…', 20000);
   let files;
   try { files = await buildJpgs(); } catch { return toast('❌ Impossibile creare le immagini (serve connessione la prima volta)'); }
+
+  // App Android: Outlook si apre con destinatari, oggetto, testo e allegati già compilati
+  if (NATIVE) {
+    try {
+      await nativeWrite(files);
+      const list = s => (s || '').split(',').filter(Boolean);
+      const r = await Plug.Mail.compose({ to: list(recipients(mail.to)), cc: list(recipients(mail.cc)), subject: mailSubject(), body: mailBody(), files: files.map(f => f.name) });
+      toast(r.outlook ? '📧 Mail pronta in Outlook: controlla e premi Invia' : 'Outlook non trovato: scegli l\'app di posta', 6000);
+    } catch (e) { toast('❌ ' + (e?.message || 'Impossibile aprire la mail')); }
+    return;
+  }
 
   // Telefono: si allegano i JPG tramite la condivisione → scegliere Outlook.
   // La condivisione non permette di precompilare i destinatari: li copio negli appunti da incollare nel campo "A".
@@ -940,9 +972,74 @@ $('#btnDownloadJpg').addEventListener('click', async () => {
   try { downloadFiles(await buildJpgs()); toast('✅ Schede scaricate'); } catch { toast('❌ Impossibile creare le immagini'); }
 });
 
+/* ================= NOTIFICHE NATIVE (app Android) ================= */
+
+// Programma nel telefono gli avvisi dei giri: arrivano anche ad app chiusa o telefono in standby.
+// Turno attuale (con posticipi, saltando i giri già fatti/avviati) + i 6 giorni successivi.
+var scheduleTimer = null;   // var: usata da saveShift anche prima di questa riga
+function scheduleNative() {
+  if (!NATIVE) return;
+  clearTimeout(scheduleTimer);
+  scheduleTimer = setTimeout(async () => {
+    try {
+      const LN = Plug.LocalNotifications;
+      const { notifications: pend } = await LN.getPending();
+      const old = pend.filter(n => n.id < 900);
+      if (old.length) await LN.cancel({ notifications: old.map(n => ({ id: n.id })) });
+      const now = Date.now(), list = [];
+      for (let day = 0; day < 7; day++) {
+        const base = shiftStart(); base.setDate(base.getDate() + day);
+        for (let i = 0; i < ROUND_COUNT; i++) {
+          let at = new Date(base.getTime() + i * ROUND_EVERY_MIN * 60000);
+          if (day === 0) { if (shift.done[i] || shift.notified[i]) continue; at = roundDue(i); }
+          if (at.getTime() <= now) continue;
+          list.push({ id: day * 10 + i + 1, title: `Giro ronda ${i + 1} di ${ROUND_COUNT}`, body: `Ore ${hhmm(at)} – inizia il giro ronda`,
+            schedule: { at, allowWhileIdle: true }, actionTypeId: 'RONDA', extra: { round: i, day }, channelId: 'ronda', smallIcon: 'ic_stat_ronda' });
+        }
+      }
+      if (list.length) await LN.schedule({ notifications: list });
+    } catch (e) { console.warn('notifiche', e); }
+  }, 500);
+}
+
+async function nativePermissions(explain) {
+  const LN = Plug.LocalNotifications;
+  const p = await LN.requestPermissions();
+  if (p.display !== 'granted') return alert('Senza il permesso per le notifiche non arriveranno gli avvisi dei giri. Puoi attivarlo dalle impostazioni del telefono.');
+  // Android 12+: le sveglie esatte vanno consentite a parte, altrimenti l'avviso può arrivare in ritardo
+  try {
+    const ex = await LN.checkExactNotificationSetting();
+    if (ex.exact_alarm !== 'granted' && confirm('Per avere gli avvisi all\'ora esatta, consenti "Sveglie e promemoria" per Ronda Chisola nella schermata che si apre.')) await LN.changeExactNotificationSetting();
+  } catch {}
+  if (explain) alert('Notifiche attive: gli avvisi dei giri arrivano anche ad app chiusa.');
+}
+
+async function initNative() {
+  document.querySelectorAll('.web-only').forEach(el => el.classList.add('hidden'));
+  document.querySelectorAll('.native-only').forEach(el => el.classList.remove('hidden'));
+  const LN = Plug.LocalNotifications;
+  try {
+    await LN.createChannel({ id: 'ronda', name: 'Giri ronda', description: 'Avvisi di inizio giro', importance: 5, visibility: 1, vibration: true, lights: true });
+    await LN.registerActionTypes({ types: [{ id: 'RONDA', actions: [
+      { id: 'start', title: 'Inizia giro', foreground: true },
+      { id: '15', title: 'Posticipa 15 min', foreground: true },
+    ] }] });
+    LN.addListener('localNotificationActionPerformed', a => {
+      const x = a.notification?.extra || {};
+      if (x.round == null) return;
+      if (shift.key !== shiftKey()) shift = loadShift();
+      shift.alarmRound = x.round; shift.notified[x.round] = true;
+      handleAlarmAction(a.actionId === 'tap' ? 'start' : a.actionId);
+    });
+    await nativePermissions(false);
+  } catch (e) { console.warn(e); }
+  scheduleNative();
+}
+
 /* ================= AVVIO ================= */
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (NATIVE) initNative();
+else if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 initMap();
 renderPhotos();
 renderAdmin();

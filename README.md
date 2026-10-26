@@ -25,3 +25,14 @@ esportare/importare la configurazione. Uscendo dalla modalità admin le posizion
 - **📧 Invia schede**: crea un JPG per ogni scheda. Sul telefono si apre la condivisione → Outlook con i JPG allegati
   (i destinatari impostati in Opzioni vengono copiati negli appunti da incollare nel campo "A");
   sul computer i JPG vengono scaricati e si apre una nuova mail con destinatari e oggetto già compilati.
+
+## App Android (APK)
+L'APK pronto è in `apk/RondaChisola.apk`. Nell'app Android gli avvisi dei giri sono notifiche native
+(arrivano anche ad app chiusa) e "Invia schede" apre Outlook con destinatari, oggetto e JPG già allegati.
+
+Per ricompilarlo (serve Android SDK e JDK 21):
+```
+cd android-app && npm install && npm run apk
+```
+La firma usa `android-app/keystore.properties` + `ronda-release.jks` (non salvati su git):
+senza la stessa chiave non si può aggiornare l'app già installata.

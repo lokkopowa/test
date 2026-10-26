@@ -269,15 +269,16 @@
 
     <div class="card">
       <h3>Notifiche</h3>
-      <p class="muted">Giri alle 21:00, 22:30, 00:00, 01:30 (ogni 90 minuti). Tieni l'app aperta con "Avvia turno": lo schermo resta acceso e l'avviso suona.</p>
+      <p class="muted web-only">Giri alle 21:00, 22:30, 00:00, 01:30 (ogni 90 minuti). Tieni l'app aperta con "Avvia turno": lo schermo resta acceso e l'avviso suona.</p>
+      <p class="muted native-only hidden">Giri alle 21:00, 22:30, 00:00, 01:30 (ogni 90 minuti). Gli avvisi arrivano anche ad app chiusa; "Avvia turno" tiene lo schermo acceso.</p>
       <div class="row">
         <button id="btnNotif" class="btn">Abilita notifiche</button>
         <button id="btnTest" class="btn">Prova avviso</button>
       </div>
-      <div class="row">
+      <div class="row web-only">
         <button id="btnIcs" class="btn">Aggiungi sveglie al calendario (.ics)</button>
       </div>
-      <p class="muted small-text">Il file .ics crea 4 promemoria ricorrenti ogni notte nel calendario del telefono: suonano anche ad app chiusa.</p>
+      <p class="muted small-text web-only">Il file .ics crea 4 promemoria ricorrenti ogni notte nel calendario del telefono: suonano anche ad app chiusa.</p>
     </div>
 
     <div class="card" id="adminLogin">
