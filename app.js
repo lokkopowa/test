@@ -693,12 +693,144 @@ $('#btnNewSheet').addEventListener('click', () => {
   loadSheet(); renderRounds();
 });
 
+/* ================= VERIFICA CARROZZE ================= */
+
+const CAR_ROWS = 45;                                   // righe del modulo cartaceo
+const CYCLE = { luogo: ['', 'OMV', 'OML'], yn: ['', 'SI', 'NO'] };
+let cars = store.get('cars', []);
+const saveCars = () => store.set('cars', cars);
+
+function renderCars() {
+  const rows = Math.max(CAR_ROWS, cars.length + 1);
+  const cyc = (i, f) => `<td class="lu" data-c="${f}" data-r="${i}">${esc(cars[i]?.[f] || '')}</td>`;
+  const inp = (i, f, mode) => `<td><input data-c="${f}" data-r="${i}" inputmode="${mode}" value="${esc(cars[i]?.[f] || '')}"></td>`;
+  $('#carRows').innerHTML = Array.from({ length: rows }, (_, i) =>
+    `<tr>${cyc(i, 'luogo')}${inp(i, 'binario', 'numeric')}${inp(i, 'num', 'numeric')}${cyc(i, 'aperta')}${cyc(i, 'graffiti')}${cyc(i, 'danneggiata')}${inp(i, 'persone', 'numeric')}</tr>`).join('');
+  renderCarTotals();
+}
+function renderCarTotals() {
+  const used = cars.filter(c => c && c.num);
+  $('#totCtrl').textContent = used.length || '';
+  $('#totAperte').textContent = used.filter(c => c.aperta === 'SI').length || '';
+  $('#totGraf').textContent = used.filter(c => c.graffiti === 'SI').length || '';
+  $('#totPers').textContent = cars.reduce((n, c) => n + (parseInt(c?.persone, 10) || 0), 0) || '';
+}
+function setCar(i, f, v) {
+  while (cars.length <= i) cars.push({});
+  cars[i][f] = v;
+  saveCars();
+}
+$('#carRows').addEventListener('input', e => {
+  const t = e.target; if (!t.dataset.c) return;
+  setCar(+t.dataset.r, t.dataset.c, t.value); renderCarTotals();
+});
+// tocco su Luogo / SI-NO: cicla tra i valori (vuoto → SI → NO → vuoto)
+$('#carRows').addEventListener('click', e => {
+  const td = e.target.closest('td.lu'); if (!td) return;
+  const i = +td.dataset.r, f = td.dataset.c, list = f === 'luogo' ? CYCLE.luogo : CYCLE.yn;
+  const v = list[(list.indexOf(cars[i]?.[f] || '') + 1) % list.length];
+  setCar(i, f, v); td.textContent = v; renderCarTotals();
+});
+
+// ----- Lettura matricola dalla foto (OCR nel telefono con Tesseract.js) -----
+let ocrWorker = null;
+function loadScript(src) {
+  return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
+}
+async function getOcr() {
+  if (ocrWorker) return ocrWorker;
+  if (!window.Tesseract) await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+  ocrWorker = await Tesseract.createWorker('eng');
+  await ocrWorker.setParameters({ tessedit_char_whitelist: '0123456789- ', tessedit_pageseg_mode: '11' });
+  return ocrWorker;
+}
+
+// Foto → scala di grigi con contrasto aumentato, per aiutare la lettura
+function prepareImage(img) {
+  const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = img.width * k; c.height = img.height * k;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
+  const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
+  let lo = 255, hi = 0;
+  for (let i = 0; i < px.length; i += 4) { const y = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000; px[i] = y; if (y < lo) lo = y; if (y > hi) hi = y; }
+  const span = Math.max(1, hi - lo);
+  for (let i = 0; i < px.length; i += 4) px[i] = px[i + 1] = px[i + 2] = (px[i] - lo) * 255 / span;
+  g.putImageData(d, 0, 0);
+  return c;
+}
+
+// Matricola UIC a 12 cifre: l'ultima è la cifra di controllo
+function uicValid(d) {
+  if (!/^\d{12}$/.test(d)) return false;
+  let sum = 0;
+  for (let i = 0; i < 11; i++) { const p = +d[i] * (i % 2 ? 1 : 2); sum += p > 9 ? p - 9 : p; }
+  return (10 - sum % 10) % 10 === +d[11];
+}
+const uicFormat = d => `${d.slice(0, 2)} ${d.slice(2, 4)} ${d.slice(4, 6)}-${d.slice(6, 8)} ${d.slice(8, 11)}-${d[11]}`;
+
+// Dal testo letto ricava i numeri candidati, prima le matricole UIC valide, poi i più lunghi
+function carCandidates(text) {
+  const groups = (text.match(/\d[\d \-]*\d|\d/g) || []).map(g => g.replace(/\D/g, '')).filter(g => g.length >= 3);
+  const all = text.replace(/\D/g, '');
+  const out = new Set();
+  for (const src of [all, ...groups]) for (let i = 0; i + 12 <= src.length; i++) if (uicValid(src.substr(i, 12))) out.add(uicFormat(src.substr(i, 12)));
+  groups.sort((a, b) => b.length - a.length).forEach(g => out.add(g));
+  return [...out].slice(0, 5);
+}
+
+$('#cPhoto').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  $('#ocrBox').classList.remove('hidden');
+  $('#ocrImg').src = URL.createObjectURL(f);
+  $('#cNumero').value = ''; $('#ocrAlt').innerHTML = '';
+  $('#ocrStatus').textContent = '⏳ Lettura dei numeri in corso… (la prima volta serve connessione)';
+  try {
+    const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = $('#ocrImg').src; });
+    const w = await getOcr();
+    const { data } = await w.recognize(prepareImage(img));
+    const cand = carCandidates(data.text);
+    if (!cand.length) { $('#ocrStatus').textContent = '❌ Nessun numero trovato: rifai la foto più da vicino e dritta, oppure scrivilo a mano.'; return; }
+    $('#cNumero').value = cand[0];
+    $('#ocrStatus').textContent = cand[0].includes('-') ? '✅ Matricola letta e verificata (cifra di controllo corretta)' : '⚠️ Numero letto: controllalo prima di inserirlo';
+    $('#ocrAlt').innerHTML = cand.length > 1 ? cand.slice(1).map(c => `<button class="alt" data-alt="${c}">${c}</button>`).join('') : '';
+  } catch (err) {
+    $('#ocrStatus').textContent = '❌ Lettura non riuscita (serve connessione la prima volta). Scrivi il numero a mano.';
+  }
+});
+$('#ocrAlt').addEventListener('click', e => { const b = e.target.closest('[data-alt]'); if (b) $('#cNumero').value = b.dataset.alt; });
+
+$('#btnAddCar').addEventListener('click', () => {
+  const num = $('#cNumero').value.trim();
+  if (!num) { $('#cNumero').focus(); return; }
+  if (cars.some(c => c?.num === num) && !confirm(`La carrozza ${num} è già nel modulo. Inserirla di nuovo?`)) return;
+  let i = cars.findIndex(c => !c?.num);
+  if (i < 0) i = cars.length;
+  setCar(i, 'num', num);
+  setCar(i, 'luogo', $('#cLuogo').value);
+  setCar(i, 'binario', $('#cBinario').value.trim());
+  store.set('carDefaults', { luogo: $('#cLuogo').value, binario: $('#cBinario').value.trim() });
+  renderCars();
+  $('#cNumero').value = ''; $('#ocrBox').classList.add('hidden');
+  navigator.vibrate?.(100);
+  document.querySelector(`#carRows tr:nth-child(${i + 1})`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+});
+
+$('#btnPrintCar').addEventListener('click', () => window.print());
+$('#btnNewCar').addEventListener('click', () => {
+  if (!confirm('Cancellare il modulo carrozze attuale e iniziarne uno nuovo?')) return;
+  cars = []; saveCars(); renderCars();
+});
+{ const d = store.get('carDefaults', {}); if (d.luogo) $('#cLuogo').value = d.luogo; $('#cBinario').value = d.binario || ''; }
+
 /* ================= AVVIO ================= */
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 initMap();
 renderPhotos();
 renderAdmin();
+renderCars();
 buildSheet();
 loadSheet();
 startGps();

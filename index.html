@@ -157,6 +157,62 @@
     <p class="muted small-text no-print">Tocca una casella orario vuota per inserire l'ora attuale. Tocca SI/NO per selezionare. La scheda si salva da sola sul telefono.</p>
   </section>
 
+  <!-- ===================== CARROZZE ===================== -->
+  <section id="view-carrozze" class="view">
+    <div class="card no-print">
+      <h3>Aggiungi carrozza</h3>
+      <div class="row tight">
+        <label>Luogo
+          <select id="cLuogo" class="field"><option>OMV</option><option>OML</option></select>
+        </label>
+        <label>Binario <input id="cBinario" class="field" inputmode="numeric"></label>
+      </div>
+      <div class="row">
+        <label class="btn big">📷 Fotografa la matricola
+          <input id="cPhoto" type="file" accept="image/*" capture="environment" hidden>
+        </label>
+      </div>
+      <div id="ocrBox" class="hidden">
+        <img id="ocrImg" class="ocr-img" alt="Foto matricola">
+        <div id="ocrStatus" class="muted"></div>
+        <div id="ocrAlt" class="rounds"></div>
+      </div>
+      <label class="muted">N° carrozza (letto dalla foto o scritto a mano)
+        <input id="cNumero" class="field big-field" inputmode="numeric" autocomplete="off">
+      </label>
+      <div class="row">
+        <button id="btnAddCar" class="btn ok">+ Inserisci nel modulo</button>
+      </div>
+      <p class="muted small-text">Puoi anche scrivere il numero a mano senza foto. Poi nel modulo tocca SI/NO per Aperta, Graffiti, Danneggiata.</p>
+    </div>
+
+    <div class="sheet" id="carSheet">
+      <table class="grid">
+        <tr><th colspan="7" class="center sheet-title">VERIFICA CARROZZE</th></tr>
+        <tr>
+          <td colspan="2">Totale controllate: <b id="totCtrl"></b></td>
+          <td colspan="2">Totale aperte: <b id="totAperte"></b></td>
+          <td colspan="3">Totale grafitate: <b id="totGraf"></b></td>
+        </tr>
+        <tr>
+          <td colspan="2">Persone allontanate: <b id="totPers"></b></td>
+          <td colspan="2"></td>
+          <td colspan="3"></td>
+        </tr>
+        <tr class="car-head">
+          <th>Luogo<br>(OMV – OML)</th><th>Binario</th><th>N° carrozza</th>
+          <th>Aperta<br>(SI-NO)</th><th>Graffiti<br>(SI-NO)</th><th>Danneggiata<br>(SI-NO)</th><th>N° Persone<br>allontanate</th>
+        </tr>
+        <tbody id="carRows"></tbody>
+      </table>
+      <p class="foot">Informazione ad uso interno - Internal use information</p>
+    </div>
+    <div class="row no-print">
+      <button id="btnPrintCar" class="btn">Stampa / Salva PDF</button>
+      <button id="btnNewCar" class="btn danger">Nuovo modulo</button>
+    </div>
+  </section>
+
   <!-- ===================== IMPOSTAZIONI ===================== -->
   <section id="view-set" class="view">
     <div class="card">
@@ -235,7 +291,8 @@
 <nav class="tabs">
   <button data-view="giro" class="active">🧭 Giro</button>
   <button data-view="scheda">📋 Scheda</button>
-  <button data-view="set">⚙️ Impostazioni</button>
+  <button data-view="carrozze">🚃 Carrozze</button>
+  <button data-view="set">⚙️ Opzioni</button>
 </nav>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

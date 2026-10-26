@@ -100,8 +100,7 @@ label input.cell { border: 1px solid #ccd; border-radius: 6px; margin-top: 4px; 
 .foot { text-align: center; margin-top: 18px; font-size: 13px; }
 
 @media print {
-  .topbar, .tabs, .no-print, .view:not(#view-scheda) { display: none !important; }
-  #view-scheda { display: block !important; }
+  .topbar, .tabs, .no-print, .alarm { display: none !important; }
   body { background: #fff; padding: 0; }
   main { padding: 0; max-width: none; }
   .yn.sel { background: none; color: #000; outline: 2px solid #000; outline-offset: -4px; border-radius: 50%; }
@@ -120,3 +119,23 @@ label.file { display: flex; flex-direction: column; gap: 2px; color: var(--muted
 .lock { margin-top: 8px; padding: 8px; border-radius: 8px; font-weight: 700; }
 .lock.on { background: #e3f4e8; color: var(--ok); }
 .lock.off { background: #fdecea; color: var(--danger); }
+
+/* ---------- Verifica carrozze ---------- */
+.sheet-title { font-size: 15px; }
+.car-head th { font-size: 12px; text-align: center; }
+#carRows td { height: 26px; padding: 0 3px; }
+#carRows td.lu { text-align: center; cursor: pointer; width: 60px; color: #1d3fa8; }
+#carRows input { width: 100%; border: 0; font: inherit; color: #1d3fa8; text-align: center; background: transparent; }
+#carRows td.yn { width: auto; }
+#carRows td.yn span { padding: 2px 4px; border-radius: 4px; }
+#carRows td.yn span.sel { background: #1d3fa8; color: #fff; font-weight: 700; }
+.ocr-img { width: 100%; max-height: 220px; object-fit: contain; background: #000; border-radius: 8px; margin-top: 10px; }
+.big-field { font-size: 22px; font-weight: 700; letter-spacing: 1px; text-align: center; }
+.rounds button.alt { background: #e3e8f2; }
+@media print {
+  #carRows td.yn span.sel { background: none; color: #000; outline: 2px solid #000; border-radius: 50%; }
+  #carRows td { height: 22px; }
+}
+#carSheet table { min-width: 620px; }
+#carRows td:nth-child(3) { min-width: 170px; }
+@media print { #carSheet table { min-width: 0; } }
