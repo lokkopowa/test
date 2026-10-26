@@ -58,9 +58,13 @@ function shiftStart(now = new Date()) {
 }
 const shiftKey = () => shiftStart().toISOString().slice(0, 10);
 
+const newShift = () => ({ key: shiftKey(), postpone: {}, notified: {}, done: {}, skipped: {}, selected: null, alarmRound: null });
+
 function loadShift() {
   let s = store.get('shift', null);
-  if (!s || s.key !== shiftKey()) s = { key: shiftKey(), postpone: {}, notified: {}, done: {}, alarmRound: null };
+  if (!s || s.key !== shiftKey()) s = newShift();
+  s.skipped ||= {};
+  if (s.selected === undefined) s.selected = null;
   return s;
 }
 let shift = loadShift();
@@ -71,8 +75,9 @@ function roundDue(i) {
   return new Date(d.getTime() + (shift.postpone[i] || 0) * 60000);
 }
 
-// Giro in corso (già scattato e non concluso) oppure il prossimo.
+// Giro in corso: quello scelto a mano dall'agente, altrimenti il primo non concluso (in ordine di orario).
 function currentRound() {
+  if (shift.selected != null && !shift.done[shift.selected]) return shift.selected;
   for (let i = 0; i < ROUND_COUNT; i++) if (!shift.done[i]) return i;
   return ROUND_COUNT - 1;
 }
@@ -244,7 +249,7 @@ $('#btnBolla').addEventListener('click', () => {
   navigator.vibrate?.([100, 50, 100]);
   // Giro concluso quando tutti i TAG del giro hanno un orario
   if (tags.every((_, i) => sheet[tagKey(i, r)])) {
-    shift.done[r] = true; saveShift();
+    shift.done[r] = true; shift.selected = null; saveShift();
     alert(`Giro ${r + 1} completato!`);
     setTarget(0);
   } else {
@@ -262,17 +267,56 @@ $('#btnBolla').addEventListener('click', () => {
 function renderRounds() {
   const cur = currentRound();
   $('#roundsList').innerHTML = Array.from({ length: ROUND_COUNT }, (_, i) => {
-    const cls = shift.done[i] ? 'done' : i === cur ? 'next' : '';
+    const cls = shift.skipped[i] ? 'skipped' : shift.done[i] ? 'done' : i === cur ? 'next' : '';
     const pp = shift.postpone[i] ? ` (+${shift.postpone[i]}′)` : '';
-    return `<span class="${cls}">Giro ${i + 1}: ${hhmm(roundDue(i))}${pp}</span>`;
+    const st = shift.skipped[i] ? ' · saltato' : shift.done[i] ? ' ✔' : '';
+    return `<button class="${cls}" data-round="${i}">Giro ${i + 1}: ${hhmm(roundDue(i))}${pp}${st}</button>`;
   }).join('');
   const allDone = Array.from({ length: ROUND_COUNT }, (_, i) => shift.done[i]).every(Boolean);
+  $('#btnSkip').disabled = allDone;
   if (allDone) { $('#nextRound').textContent = 'Tutti i giri completati'; return; }
   const due = roundDue(cur), mins = Math.round((due - Date.now()) / 60000);
+  if (shift.selected === cur) { $('#nextRound').textContent = `Giro ${cur + 1} IN CORSO (scelto a mano)`; return; }
   $('#nextRound').textContent = mins > 0
     ? `Giro ${cur + 1} alle ${hhmm(due)} (tra ${mins >= 60 ? Math.floor(mins / 60) + ' h ' : ''}${mins % 60} min)`
     : `Giro ${cur + 1} IN CORSO (dalle ${hhmm(due)})`;
 }
+
+// Tocco su un giro: lo si effettua subito, a prescindere dall'orario (se già fatto/saltato, lo si riapre)
+$('#roundsList').addEventListener('click', e => {
+  const b = e.target.closest('[data-round]'); if (!b) return;
+  const i = +b.dataset.round;
+  if (shift.done[i]) {
+    if (!confirm(`Il giro ${i + 1} è già ${shift.skipped[i] ? 'stato saltato' : 'completato'}. Riaprirlo per effettuarlo ora?`)) return;
+    shift.done[i] = false; shift.skipped[i] = false;
+  } else if (i === currentRound()) return;
+  else if (!confirm(`Effettuare ora il giro ${i + 1} (previsto alle ${hhmm(roundDue(i))})?`)) return;
+  selectRound(i);
+});
+
+function selectRound(i) {
+  shift.selected = i;
+  shift.notified[i] = true;   // niente avviso per un giro già iniziato a mano
+  saveShift();
+  focusRound(i);
+}
+
+// Punta al primo TAG non ancora bollato del giro
+function focusRound(i) {
+  const sheet = store.get('sheet', {}), c = Math.min(i, TAG_COLUMNS - 1);
+  const j = tags.findIndex((_, k) => !sheet[tagKey(k, c)]);
+  setTarget(j < 0 ? 0 : j);
+  renderRounds();
+}
+
+$('#btnSkip').addEventListener('click', () => {
+  const i = currentRound();
+  if (shift.done[i] || !confirm(`Saltare il giro ${i + 1}? Verrà segnato come "saltato".`)) return;
+  shift.done[i] = true; shift.skipped[i] = true; shift.notified[i] = true;
+  if (shift.selected === i) shift.selected = null;
+  saveShift();
+  focusRound(currentRound());
+});
 
 function tick() {
   if (shift.key !== shiftKey()) shift = loadShift();
@@ -328,7 +372,7 @@ function handleAlarmAction(action) {
   navigator.serviceWorker?.ready.then(r => r.getNotifications({ tag: 'ronda' })).then(ns => ns?.forEach(n => n.close())).catch(() => {});
   if (i == null) return;
   if (action === 'start') {
-    showView('giro'); setTarget(0);
+    showView('giro'); selectRound(i);
   } else {
     const min = parseInt(action, 10) || 10;
     // posticipo a partire da ora (non dall'orario previsto)
@@ -645,7 +689,7 @@ $('#btnPrint').addEventListener('click', () => window.print());
 $('#btnNewSheet').addEventListener('click', () => {
   if (!confirm('Cancellare la scheda attuale e iniziarne una nuova?')) return;
   store.set('sheet', null);
-  shift = { key: shiftKey(), postpone: {}, notified: {}, done: {}, alarmRound: null }; saveShift();
+  shift = newShift(); saveShift();
   loadSheet(); renderRounds();
 });
 
