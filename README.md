@@ -19,3 +19,9 @@ Caricare le foto in `img/` (es. `img/tag1-vicino.jpg`) e impostare `nearPhoto` i
 Impostazioni → password admin. Le posizioni dei TAG sono bloccate per tutti; l'admin può sbloccarle per:
 aggiungere/eliminare/riordinare TAG, modificare nome e coordinate, caricare foto, calibrare la bussola,
 esportare/importare la configurazione. Uscendo dalla modalità admin le posizioni si ribloccano.
+
+## Schede e invio
+- **Report di fine turno**, **Consuntivazione GPG** (scheda 📋) e **Verifica carrozze** (scheda 🚃, con lettura della matricola dalla foto).
+- **📧 Invia schede**: crea un JPG per ogni scheda. Sul telefono si apre la condivisione → Outlook con i JPG allegati
+  (i destinatari impostati in Opzioni vengono copiati negli appunti da incollare nel campo "A");
+  sul computer i JPG vengono scaricati e si apre una nuova mail con destinatari e oggetto già compilati.

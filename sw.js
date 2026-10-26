@@ -1,4 +1,4 @@
-const CACHE = 'ronda-v8';
+const CACHE = 'ronda-v10';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json',
   'img/tag1.jpg', 'img/tag1-vicino.jpg', 'img/tag2.jpg', 'img/tag2-vicino.jpg', 'img/tag3.jpg', 'img/tag3-vicino.jpg', 'img/tag4.jpg', 'img/tag4-vicino.jpg', 'img/icon-192.png', 'img/icon-512.png'];
 

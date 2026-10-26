@@ -633,6 +633,8 @@ $('#btnResetTags').addEventListener('click', () => {
 
 const yn = k => `<td class="yn" data-k="${k}" data-v="SI">SI</td><td class="yn" data-k="${k}" data-v="NO">NO</td>`;
 const tcell = k => `<td class="t"><input data-k="${k}" inputmode="numeric" class="time"></td>`;
+const dcell = k => `<td class="t"><input data-k="${k}" inputmode="numeric" class="date"></td>`;
+const GPG_ROWS = 4;
 
 function buildSheet() {
   $('#gates').innerHTML = GATES.map((g, i) =>
@@ -645,7 +647,12 @@ function buildSheet() {
   $('#ffoo').innerHTML = Array.from({ length: FFOO_ROWS }, (_, i) =>
     `<tr><td><input data-k="ff_${i}_forza" class="cell"></td>${tcell(`ff_${i}_rich`)}${tcell(`ff_${i}_int`)}<td><input data-k="ff_${i}_motivo" class="cell"></td></tr>`).join('');
 
-  const sheetEl = $('#sheet');
+  $('#gpgRows').innerHTML = Array.from({ length: GPG_ROWS }, (_, i) =>
+    `<tr><td class="name">GPG ${i < 2 ? i + 1 : '__'}</td><td><input data-k="gpg_${i}_nome" class="cell"></td>` +
+    `${dcell(`gpg_${i}_d1`)}${tcell(`gpg_${i}_o1`)}${dcell(`gpg_${i}_d2`)}${tcell(`gpg_${i}_o2`)}</tr>`).join('');
+
+  // Report fine turno e Consuntivazione GPG condividono lo stesso salvataggio
+  for (const sheetEl of [$('#sheet'), $('#gpgSheet')]) {
   sheetEl.addEventListener('input', e => {
     const k = e.target.dataset.k || e.target.dataset.f;
     if (!k) return;
@@ -658,14 +665,21 @@ function buildSheet() {
     s[td.dataset.k] = s[td.dataset.k] === td.dataset.v ? '' : td.dataset.v;
     store.set('sheet', s); loadSheet();
   });
-  // tocco su casella orario vuota = ora attuale
+  // tocco su casella orario/data vuota = ora/data attuale
   sheetEl.addEventListener('focusin', e => {
-    if (e.target.classList.contains('time') && !e.target.value) {
-      e.target.value = hhmm(new Date());
-      e.target.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+    const t = e.target;
+    if (t.value || !(t.classList.contains('time') || t.classList.contains('date'))) return;
+    t.value = t.classList.contains('time') ? hhmm(new Date()) : ddmm(new Date());
+    t.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  }
 }
+
+// Selettore Report fine turno / Consuntivazione GPG
+document.querySelectorAll('[data-sheet]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-sheet]').forEach(x => x.classList.toggle('active', x === b));
+  ['sheet', 'gpgSheet'].forEach(id => $('#' + id).classList.toggle('hidden', id !== b.dataset.sheet));
+}));
 
 function buildTagRows() {
   $('#tagRows').innerHTML = tags.map((t, i) =>
@@ -676,10 +690,10 @@ function loadSheet() {
   let s = store.get('sheet', null);
   if (!s) {
     const st = shiftStart(), end = new Date(st.getTime() + 6 * 3600000);
-    s = { dalleOre: '21:00', dalGiorno: ddmm(st), alleOre: '03:00', alGiorno: ddmm(end) };
+    s = { dalleOre: '21:00', dalGiorno: ddmm(st), alleOre: '03:00', alGiorno: ddmm(end), gpgGiorno: `${ddmm(st)}/${st.getFullYear()}` };
     store.set('sheet', s);
   }
-  document.querySelectorAll('#sheet [data-k], #sheet [data-f]').forEach(el => {
+  document.querySelectorAll('#sheet [data-k], #sheet [data-f], #gpgSheet [data-k]').forEach(el => {
     if (el.classList.contains('yn')) el.classList.toggle('sel', s[el.dataset.k] === el.dataset.v);
     else el.value = s[el.dataset.k || el.dataset.f] || '';
   });
@@ -823,6 +837,108 @@ $('#btnNewCar').addEventListener('click', () => {
   cars = []; saveCars(); renderCars();
 });
 { const d = store.get('carDefaults', {}); if (d.luogo) $('#cLuogo').value = d.luogo; $('#cBinario').value = d.binario || ''; }
+
+/* ================= ESPORTAZIONE JPG + INVIO EMAIL ================= */
+
+// Schede da esportare: [elemento, nome file]
+const EXPORT_SHEETS = [
+  ['#sheet', 'Report_fine_turno'],
+  ['#carSheet', 'Verifica_carrozze'],
+  ['#gpgSheet', 'Consuntivazione_GPG'],
+];
+
+let mail = store.get('mail', { to: '', cc: '', subject: 'Report servizio IMC Torino Smistamento - {data}' });
+['to', 'cc', 'subject'].forEach(k => {
+  const el = $('#mail' + k[0].toUpperCase() + k.slice(1));
+  el.value = mail[k] || '';
+  el.addEventListener('change', () => { mail[k] = el.value.trim(); store.set('mail', mail); });
+});
+
+function toast(msg, ms = 4000) {
+  $('#toast').textContent = msg; $('#toast').classList.remove('hidden');
+  clearTimeout(toast.t); toast.t = setTimeout(() => $('#toast').classList.add('hidden'), ms);
+}
+
+// Data del turno "26-27/10" per oggetto e nomi file
+function shiftLabel() {
+  const st = shiftStart(), end = new Date(st.getTime() + 6 * 3600000);
+  return `${pad(st.getDate())}-${pad(end.getDate())}/${pad(end.getMonth() + 1)}/${end.getFullYear()}`;
+}
+
+// Fotografa una scheda: la copia (con i valori scritti) fuori schermo a larghezza fissa e la rende in JPG
+async function sheetToJpg(sel) {
+  if (!window.html2canvas) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  const src = $(sel);
+  src.querySelectorAll('input, textarea').forEach(el => {
+    if (el.tagName === 'TEXTAREA') el.textContent = el.value; else el.setAttribute('value', el.value);
+  });
+  const stage = document.createElement('div');
+  stage.className = 'export-stage';
+  const clone = src.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.classList.remove('hidden');
+  // i campi diventano testo semplice: in JPG si leggono meglio
+  clone.querySelectorAll('textarea').forEach(t => { const d = document.createElement('div'); d.style.whiteSpace = 'pre-wrap'; d.style.minHeight = '200px'; d.style.color = '#1d3fa8'; d.textContent = t.value; t.replaceWith(d); });
+  clone.querySelectorAll('input').forEach(i => { const sp = document.createElement('span'); sp.textContent = i.value; sp.style.color = '#1d3fa8'; sp.style.display = 'inline-block'; sp.style.minWidth = '40px';
+    if (i.closest('td.t')) { sp.style.width = '100%'; sp.style.textAlign = 'center'; }
+    i.replaceWith(sp); });
+  stage.appendChild(clone);
+  document.body.appendChild(stage);
+  try {
+    const canvas = await html2canvas(clone, { scale: 2, backgroundColor: '#ffffff', logging: false });
+    return await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+  } finally { stage.remove(); }
+}
+
+async function buildJpgs() {
+  const tag = shiftLabel().replace(/\//g, '-');
+  const files = [];
+  for (const [sel, name] of EXPORT_SHEETS) {
+    if (!$(sel)) continue;
+    files.push(new File([await sheetToJpg(sel)], `${name}_${tag}.jpg`, { type: 'image/jpeg' }));
+  }
+  return files;
+}
+
+function downloadFiles(files) {
+  files.forEach((f, i) => setTimeout(() => {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click();
+  }, i * 400));
+}
+
+const recipients = s => (s || '').split(/[,;\s]+/).filter(Boolean).join(',');
+const mailSubject = () => (mail.subject || 'Report servizio').replace('{data}', shiftLabel());
+const mailBody = () => `Buongiorno,\nin allegato le schede del servizio di vigilanza IMC Torino Smistamento – Via Chisola 28, turno ${shiftLabel()}.\n\nCordiali saluti`;
+
+async function sendSheets() {
+  if (!recipients(mail.to)) { showView('set'); $('#mailTo').focus(); return toast('Inserisci prima i destinatari nelle Opzioni'); }
+  toast('⏳ Preparo le schede in JPG…', 20000);
+  let files;
+  try { files = await buildJpgs(); } catch { return toast('❌ Impossibile creare le immagini (serve connessione la prima volta)'); }
+
+  // Telefono: si allegano i JPG tramite la condivisione → scegliere Outlook.
+  // La condivisione non permette di precompilare i destinatari: li copio negli appunti da incollare nel campo "A".
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try { await navigator.clipboard.writeText(recipients(mail.to).replace(/,/g, '; ')); } catch {}
+    toast('📋 Destinatari copiati: in Outlook tieni premuto sul campo "A" e scegli Incolla', 8000);
+    try {
+      await navigator.share({ files, title: mailSubject(), text: mailBody() });
+    } catch (e) { if (e.name !== 'AbortError') toast('❌ Condivisione non riuscita'); }
+    return;
+  }
+  // Computer: scarico i JPG e apro una nuova mail con destinatari e oggetto già compilati, poi si allegano i file scaricati
+  downloadFiles(files);
+  const q = new URLSearchParams({ subject: mailSubject(), body: mailBody() + '\n\n(allegare i file JPG appena scaricati)' });
+  if (recipients(mail.cc)) q.set('cc', recipients(mail.cc));
+  location.href = `mailto:${recipients(mail.to)}?${q.toString().replace(/\+/g, '%20')}`;
+  toast('📎 JPG scaricati: trascinali nella mail che si è aperta', 8000);
+}
+
+document.querySelectorAll('.btnSend').forEach(b => b.addEventListener('click', sendSheets));
+$('#btnDownloadJpg').addEventListener('click', async () => {
+  toast('⏳ Preparo le schede in JPG…', 20000);
+  try { downloadFiles(await buildJpgs()); toast('✅ Schede scaricate'); } catch { toast('❌ Impossibile creare le immagini'); }
+});
 
 /* ================= AVVIO ================= */
 

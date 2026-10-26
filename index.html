@@ -22,6 +22,8 @@
 </header>
 
 <!-- Avviso giro ronda (in-app) -->
+<div id="toast" class="toast hidden"></div>
+
 <div id="alarm" class="alarm hidden">
   <div class="alarm-box">
     <h2 id="alarmTitle">Inizio giro ronda</h2>
@@ -97,6 +99,10 @@
 
   <!-- ===================== SCHEDA ===================== -->
   <section id="view-scheda" class="view">
+    <div class="seg no-print">
+      <button data-sheet="sheet" class="active">Report fine turno</button>
+      <button data-sheet="gpgSheet">Consuntivazione GPG</button>
+    </div>
     <div class="sheet" id="sheet">
       <table class="hdr">
         <tr>
@@ -150,11 +156,38 @@
       </table>
       <p class="foot">Informazione ad uso interno - Internal use information</p>
     </div>
+    <div class="sheet hidden" id="gpgSheet">
+      <div class="gpg-logo"><div class="fs">SECURITY</div><div class="fs-sub">GRUPPO FERROVIE DELLO STATO ITALIANE</div></div>
+      <table class="grid gpg-info">
+        <tr><td class="lbl">Impianto</td><th>IMC TORINO SMISTAMENTO</th></tr>
+        <tr><td class="lbl">Indirizzo</td><th>Via Chisola, 28 - Torino</th></tr>
+        <tr><td class="lbl">IdV</td><th>SICURITALIA</th></tr>
+      </table>
+      <h3 class="gpg-title">CONSUNTIVAZIONE GPG</h3>
+      <p class="center">GIORNO: <input data-k="gpgGiorno" class="line" placeholder="gg/mm/aaaa"></p>
+      <table class="grid gpg-prev">
+        <tr><td class="lbl">n° GPG previste</td><th>2 (due)</th><td class="lbl">Orario</td><th>21:00/03:00</th></tr>
+      </table>
+      <table class="grid gpg-main">
+        <tr><td class="blank" colspan="2"></td><th colspan="2">INIZIO TURNO</th><th colspan="2">FINE TURNO</th></tr>
+        <tr><td class="blank"></td><th>Nominativo</th><th>Data</th><th>Ora</th><th>Data</th><th>Ora</th></tr>
+        <tbody id="gpgRows"></tbody>
+      </table>
+      <p class="gpg-note">Gli orari da riportare nella tabella qui sopra <b>devono coincidere</b> con quelli che vengono annotati sul registro accessi, presente in portineria, in occasione dell’accesso e dell’uscita delle GPG.</p>
+      <div class="gpg-legal">
+        Via Marsala, 27 - 00185 Roma<br>
+        FS Security S.p.A. - Gruppo Ferrovie dello Stato Italiane<br>
+        Società con socio unico soggetta alla direzione e coordinamento di Ferrovie dello Stato Italiane S.p.A.<br>
+        Sede legale: Piazza della Croce Rossa, 1 - 00161 Roma · Cap. Soc. Euro 500.000,00<br>
+        Iscritta al Registro delle Imprese di Roma 16918161007 · Cod. Fisc. e P. Iva 16918161007 – R.E.A. 1683991
+      </div>
+    </div>
     <div class="row no-print">
       <button id="btnPrint" class="btn">Stampa / Salva PDF</button>
+      <button class="btn ok btnSend">📧 Invia schede</button>
       <button id="btnNewSheet" class="btn danger">Nuova scheda</button>
     </div>
-    <p class="muted small-text no-print">Tocca una casella orario vuota per inserire l'ora attuale. Tocca SI/NO per selezionare. La scheda si salva da sola sul telefono.</p>
+    <p class="muted small-text no-print">Tocca una casella orario (o data) vuota per inserire l'ora (o la data) attuale. Tocca SI/NO per selezionare. La scheda si salva da sola sul telefono.</p>
   </section>
 
   <!-- ===================== CARROZZE ===================== -->
@@ -209,12 +242,31 @@
     </div>
     <div class="row no-print">
       <button id="btnPrintCar" class="btn">Stampa / Salva PDF</button>
+      <button class="btn ok btnSend">📧 Invia schede</button>
       <button id="btnNewCar" class="btn danger">Nuovo modulo</button>
     </div>
   </section>
 
   <!-- ===================== IMPOSTAZIONI ===================== -->
   <section id="view-set" class="view">
+    <div class="card">
+      <h3>Invio schede via email</h3>
+      <p class="muted small-text">Le schede compilate vengono salvate come immagini JPG e allegate a una nuova mail.</p>
+      <label class="muted">Destinatari (A) – separati da virgola
+        <input id="mailTo" class="field" type="email" multiple placeholder="nome@azienda.it, altro@azienda.it">
+      </label>
+      <label class="muted">Copia conoscenza (Cc)
+        <input id="mailCc" class="field" type="email" multiple>
+      </label>
+      <label class="muted">Oggetto
+        <input id="mailSubject" class="field">
+      </label>
+      <div class="row">
+        <button class="btn ok btnSend">📧 Invia schede</button>
+        <button id="btnDownloadJpg" class="btn">Scarica JPG</button>
+      </div>
+    </div>
+
     <div class="card">
       <h3>Notifiche</h3>
       <p class="muted">Giri alle 21:00, 22:30, 00:00, 01:30 (ogni 90 minuti). Tieni l'app aperta con "Avvia turno": lo schermo resta acceso e l'avviso suona.</p>

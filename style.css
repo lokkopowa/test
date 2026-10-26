@@ -139,3 +139,31 @@ label.file { display: flex; flex-direction: column; gap: 2px; color: var(--muted
 #carSheet table { min-width: 620px; }
 #carRows td:nth-child(3) { min-width: 170px; }
 @media print { #carSheet table { min-width: 0; } }
+
+/* ---------- Esportazione JPG / invio ---------- */
+.export-stage { position: fixed; left: -10000px; top: 0; width: 820px; background: #fff; }
+.export-stage .sheet { width: 820px; overflow: visible; font-size: 13px; padding: 24px; }
+.export-stage table { min-width: 0 !important; }
+.export-stage .no-print { display: none !important; }
+.export-stage .yn.sel { background: none; color: #000; outline: 2px solid #000; outline-offset: -4px; border-radius: 50%; }
+.export-stage .lined { background: none; }
+.toast { position: fixed; left: 16px; right: 16px; bottom: 80px; z-index: 3000; background: #222; color: #fff; padding: 12px 14px;
+  border-radius: 10px; font-size: 15px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+
+/* ---------- Consuntivazione GPG ---------- */
+.seg { display: flex; gap: 6px; margin-bottom: 10px; }
+.seg button { flex: 1; border: 0; border-radius: 10px; padding: 10px; background: #dde3ee; font: inherit; font-size: 14px; }
+.seg button.active { background: var(--blue); color: #fff; font-weight: 700; }
+.gpg-logo { margin: 10px 0 24px 20px; }
+.gpg-logo .fs { font-weight: 800; font-style: italic; font-size: 22px; color: #555; }
+.gpg-logo .fs-sub { font-size: 8px; font-weight: 700; color: #444; }
+.gpg-info, .gpg-prev { width: 80% !important; margin: 0 auto 10px; }
+.gpg-info td.lbl, .gpg-prev td.lbl { text-align: center; width: 30%; }
+.gpg-info th, .gpg-prev th { text-align: center; font-size: 14px; }
+.gpg-title { text-align: center; margin: 18px 0 8px; font-size: 15px; }
+.gpg-main th { text-align: center; }
+.gpg-main td.blank { border-top: 0; border-left: 0; }
+.gpg-main td.t { min-width: 56px; }
+.gpg-note { margin: 16px 8px; font-size: 13px; text-align: justify; }
+.gpg-legal { margin-top: 90px; font-family: "Times New Roman", serif; font-size: 9px; color: #444; line-height: 1.3; }
+@media print { .seg { display: none; } }
