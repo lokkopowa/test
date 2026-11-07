@@ -42,9 +42,9 @@
   <section id="view-giro" class="view active">
     <div class="card setup" id="setupHint">
       <h3>👋 App da configurare</h3>
-      <p>Questa app è vergine: non ci sono ancora impianto né TAG.</p>
+      <p>Questo impianto non ha ancora TAG.</p>
       <ol>
-        <li>Vai in <b>⚙️ Opzioni</b> → <b>Accesso admin</b>.</li>
+        <li>Vai in <b>⚙️ Opzioni</b> → <b>Accesso admin</b> (per un altro sito: <b>➕ Nuovo impianto</b>).</li>
         <li>Compila <b>Dati impianto e turno</b> (nome, indirizzo, orari dei giri, cancelli…).</li>
         <li>Sblocca le posizioni e, davanti a ogni TAG, usa <b>Nuovo TAG</b>: nome, 📍 posizione e 📷 foto.</li>
       </ol>
@@ -261,6 +261,16 @@
 
   <!-- ===================== IMPOSTAZIONI ===================== -->
   <section id="view-set" class="view">
+    <div class="card" id="siteCard">
+      <h3>🏢 Impianto</h3>
+      <select id="siteSelect" class="field"></select>
+      <p class="muted small-text">Ogni impianto ha i suoi TAG, foto, orari, schede e destinatari mail.</p>
+      <div id="siteAdmin" class="row hidden">
+        <button id="btnNewSite" class="btn ok">➕ Nuovo impianto</button>
+        <button id="btnDelSite" class="btn danger">Elimina impianto</button>
+      </div>
+    </div>
+
     <div class="card">
       <h3>Invio schede via email</h3>
       <p class="muted small-text">Le schede compilate vengono salvate come immagini JPG e allegate a una nuova mail.</p>

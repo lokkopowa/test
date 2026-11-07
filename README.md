@@ -44,4 +44,6 @@ Stessa app, ma senza impianto né TAG predefiniti: si configura per qualsiasi st
 - **Nuovo TAG**: nome + 📍 posizione GPS (o coordinate scritte) + 📷 foto scattata sul posto.
   La mappa si centra da sola sui TAG inseriti.
 - **Promemoria dei giri** attivabili/disattivabili da Opzioni → Notifiche.
+- **Più impianti nella stessa app** (Porta Susa, Porta Nuova, Rebaudengo…): Opzioni → 🏢 Impianto.
+  L'admin crea un nuovo impianto con ➕; ognuno ha i suoi TAG, foto, orari, schede e destinatari.
 - APK: `apk/RondaVigilanza-universale.apk` (pacchetto `it.ronda.vigilanza`, si installa accanto a Ronda Chisola).

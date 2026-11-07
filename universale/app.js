@@ -16,11 +16,28 @@ const DEFAULT_SITE = {
 
 /* ================= STORAGE ================= */
 
-// Prefisso diverso dall'app di Chisola: se aperte dallo stesso sito non si mescolano i dati
-const store = {
-  get(k, def) { try { const v = localStorage.getItem('rondaU.' + k); return v ? JSON.parse(v) : def; } catch { return def; } },
-  set(k, v) { try { localStorage.setItem('rondaU.' + k, JSON.stringify(v)); return true; } catch { return false; } },
-};
+// Dati del telefono (elenco impianti, impianto attivo, bussola, blocco) e dati di ciascun impianto
+// (TAG, orari, schede, mail...) sono separati: ogni impianto ha il proprio prefisso.
+const mkStore = prefix => ({
+  get(k, def) { try { const v = localStorage.getItem(prefix + k); return v ? JSON.parse(v) : def; } catch { return def; } },
+  set(k, v) { try { localStorage.setItem(prefix + k, JSON.stringify(v)); return true; } catch { return false; } },
+});
+const gstore = mkStore('rondaU.');
+
+// Elenco impianti [{ id, name }] e impianto attivo
+let sites = gstore.get('sites', null);
+if (!sites) {
+  // primo avvio, o versione precedente con un solo impianto: i suoi dati diventano l'impianto "s1"
+  sites = [{ id: 's1', name: gstore.get('site', {}).name || '' }];
+  for (const k of ['site', 'shift', 'sheet', 'cars', 'carDefaults', 'targetIdx', 'nearRadius', 'reminders', 'mail']) {
+    const v = localStorage.getItem('rondaU.' + k);
+    if (v != null) { localStorage.setItem('rondaU.s1.' + k, v); localStorage.removeItem('rondaU.' + k); }
+  }
+  gstore.set('sites', sites); gstore.set('active', 's1');
+}
+let activeId = gstore.get('active', sites[0].id);
+if (!sites.some(x => x.id === activeId)) activeId = sites[0].id;
+const store = mkStore(`rondaU.${activeId}.`);
 
 // I TAG con le loro foto stanno in IndexedDB: molto più spazio di localStorage
 const idb = (() => {
@@ -34,17 +51,18 @@ const idb = (() => {
     const db = await open();
     return new Promise((ok, ko) => { const t = db.transaction('kv', mode); const req = fn(t.objectStore('kv')); t.oncomplete = () => ok(req.result); t.onerror = () => ko(t.error); });
   };
-  return { get: k => run('readonly', st => st.get(k)), set: (k, v) => run('readwrite', st => st.put(v, k)) };
+  return { get: k => run('readonly', st => st.get(k)), set: (k, v) => run('readwrite', st => st.put(v, k)), del: k => run('readwrite', st => st.delete(k)) };
 })();
+const tagsKey = id => 'tags:' + id;
 
 let site = { ...DEFAULT_SITE, ...store.get('site', {}) };
 let tags = [];   // caricati all'avvio da IndexedDB
-const saveTags = () => idb.set('tags', tags).catch(() => alert('Memoria del telefono piena: elimina qualche foto.'));
+const saveTags = () => idb.set(tagsKey(activeId), tags).catch(() => alert('Memoria del telefono piena: elimina qualche foto.'));
 let nearRadius = store.get('nearRadius', 30);
 let targetIdx = 0;
 let remindersOn = store.get('reminders', true);      // promemoria dei giri attivi/disattivati
-let compassOffset = store.get('compassOffset', 0);   // correzione bussola in gradi
-let locked = store.get('locked', true);              // posizioni TAG bloccate
+let compassOffset = gstore.get('compassOffset', 0);  // correzione bussola in gradi (è del telefono)
+let locked = gstore.get('locked', true);             // posizioni TAG bloccate
 
 // Modalità admin (dura finché l'app resta aperta). Nel codice c'è solo l'hash SHA-256 della password.
 const ADMIN_HASH = 'e42461f344370e918af4832c8292e68abbbc47196a108f5b05d53b2975e24c17';
@@ -626,7 +644,7 @@ $('#btnDrag').addEventListener('click', () => { toggleDrag(!dragMode); if (dragM
 
 $('#btnLock').addEventListener('click', () => {
   if (!admin) return;
-  locked = !locked; store.set('locked', locked);
+  locked = !locked; gstore.set('locked', locked);
   renderAdmin();
 });
 
@@ -637,13 +655,13 @@ $('#btnAdmin').addEventListener('click', async () => {
   try { ok = (await sha256(pw)) === ADMIN_HASH; } catch { alert('Accesso admin disponibile solo da connessione sicura (https)'); return; }
   if (!ok) return alert('Password errata');
   admin = true; sessionStorage.setItem('rondaU.admin', '1');
-  renderAdmin();
+  renderAdmin(); renderSites();
 });
 $('#adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnAdmin').click(); });
 $('#btnLogout').addEventListener('click', () => {
   admin = false; sessionStorage.removeItem('rondaU.admin');
-  locked = true; store.set('locked', true);   // uscendo si ribloccano sempre le posizioni
-  renderAdmin();
+  locked = true; gstore.set('locked', true);   // uscendo si ribloccano sempre le posizioni
+  renderAdmin(); renderSites();
 });
 
 $('#nearRadius').addEventListener('change', e => {
@@ -654,7 +672,7 @@ $('#nearRadius').addEventListener('change', e => {
 // ----- Calibrazione bussola -----
 function setOffset(v) {
   compassOffset = ((v + 540) % 360) - 180;   // tra -180 e +180
-  store.set('compassOffset', compassOffset);
+  gstore.set('compassOffset', compassOffset);
   if (rawHeading != null) heading = compassHeading = (rawHeading + compassOffset + 360) % 360;
   renderAdmin(); updateArrow();
 }
@@ -696,6 +714,47 @@ $('#btnResetTags').addEventListener('click', () => {
   tagsChanged();
 });
 
+/* ================= IMPIANTI (più siti nella stessa app) ================= */
+
+const siteLabel = x => x.name || 'Impianto senza nome';
+function renderSites() {
+  $('#siteSelect').innerHTML = sites.map(x => `<option value="${x.id}" ${x.id === activeId ? 'selected' : ''}>${esc(siteLabel(x))}</option>`).join('');
+  $('#siteAdmin').classList.toggle('hidden', !admin);
+  $('#btnDelSite').disabled = sites.length < 2;
+}
+// Cambio impianto: si salva la scelta e si ricarica l'app con i dati di quell'impianto
+function switchSite(id) {
+  gstore.set('active', id);
+  location.reload();
+}
+$('#siteSelect').addEventListener('change', e => {
+  const x = sites.find(y => y.id === e.target.value);
+  if (!confirm(`Passare all'impianto "${siteLabel(x)}"?`)) return renderSites();
+  switchSite(x.id);
+});
+$('#btnNewSite').addEventListener('click', () => {
+  if (!admin) return;
+  const name = prompt('Nome del nuovo impianto (es. Torino Porta Susa):', '');
+  if (!name || !name.trim()) return;
+  const id = 's' + Date.now().toString(36);
+  sites.push({ id, name: name.trim() });
+  gstore.set('sites', sites);
+  mkStore(`rondaU.${id}.`).set('site', { ...DEFAULT_SITE, name: name.trim() });
+  alert(`Impianto "${name.trim()}" creato. Ora compila i dati dell'impianto e aggiungi i TAG.`);
+  switchSite(id);
+});
+$('#btnDelSite').addEventListener('click', async () => {
+  if (!admin || sites.length < 2) return;
+  if (!confirm(`Eliminare l'impianto "${siteLabel(site)}" con tutti i suoi TAG, foto e schede? Conviene prima fare "Esporta file".`)) return;
+  if (prompt('Per confermare scrivi ELIMINA') !== 'ELIMINA') return;
+  Object.keys(localStorage).filter(k => k.startsWith(`rondaU.${activeId}.`)).forEach(k => localStorage.removeItem(k));
+  try { await idb.del(tagsKey(activeId)); } catch {}
+  sites = sites.filter(x => x.id !== activeId);
+  gstore.set('sites', sites);
+  switchSite(sites[0].id);
+});
+$('#topName').addEventListener('click', () => { showView('set'); $('#siteCard').scrollIntoView({ behavior: 'smooth' }); });
+
 /* ================= DATI IMPIANTO E TURNO ================= */
 
 // Mette i dati dell'impianto in intestazione, moduli e testi
@@ -732,6 +791,7 @@ function saveSite(next) {
   const before = autoSheetFields();
   site = next;
   store.set('site', site);
+  sites = sites.map(x => x.id === activeId ? { ...x, name: site.name } : x); gstore.set('sites', sites); renderSites();
   // aggiorna date/orari della scheda in corso, ma solo quelli non modificati a mano
   const sh = store.get('sheet', null), after = autoSheetFields();
   if (sh) { for (const k in after) if (!sh[k] || sh[k] === before[k]) sh[k] = after[k]; store.set('sheet', sh); }
@@ -1134,7 +1194,7 @@ function scheduleNative() {
           let at = roundBase(i, base);
           if (day === 0) { if (shift.done[i] || shift.notified[i]) continue; at = roundDue(i); }
           if (at.getTime() <= now) continue;
-          list.push({ id: day * 10 + i + 1, title: `Giro ronda ${i + 1} di ${roundCount()}`, body: `Ore ${hhmm(at)} – inizia il giro ronda`,
+          list.push({ id: day * 10 + i + 1, title: `Giro ronda ${i + 1} di ${roundCount()}${site.name ? ' – ' + site.name : ''}`, body: `Ore ${hhmm(at)} – inizia il giro ronda`,
             schedule: { at, allowWhileIdle: true }, actionTypeId: 'RONDA', extra: { round: i, day }, channelId: 'ronda', smallIcon: 'ic_stat_ronda' });
         }
       }
@@ -1180,7 +1240,15 @@ async function initNative() {
 /* ================= AVVIO ================= */
 
 (async () => {
-  try { tags = (await idb.get('tags')) || []; } catch { tags = []; }
+  try {
+    tags = await idb.get(tagsKey(activeId));
+    if (!tags && activeId === 's1') {   // TAG della versione precedente (un solo impianto)
+      tags = await idb.get('tags');
+      if (tags) { await idb.set(tagsKey('s1'), tags); await idb.del('tags'); }
+    }
+    tags ||= [];
+  } catch { tags = []; }
+  renderSites();
   targetIdx = Math.max(0, Math.min(store.get('targetIdx', 0), tags.length - 1));
   if (NATIVE) initNative();
   else if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
