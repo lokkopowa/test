@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b3d91">
+<title>Ronda Vigilanza</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="img/icon-192.png">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <strong id="topName">Ronda Vigilanza</strong>
+    <small><span id="topAddr"></span><span id="topSep"> · </span><span id="clock">--:--</span></small>
+  </div>
+  <button id="btnShift" class="btn small">Avvia turno</button>
+</header>
+
+<!-- Avviso giro ronda (in-app) -->
+<div id="toast" class="toast hidden"></div>
+
+<div id="alarm" class="alarm hidden">
+  <div class="alarm-box">
+    <h2 id="alarmTitle">Inizio giro ronda</h2>
+    <p id="alarmText"></p>
+    <button class="btn big" data-alarm="start">Inizia giro ora</button>
+    <div class="row">
+      <button class="btn" data-alarm="10">+10 min</button>
+      <button class="btn" data-alarm="15">+15 min</button>
+      <button class="btn" data-alarm="30">+30 min</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <!-- ===================== GIRO ===================== -->
+  <section id="view-giro" class="view active">
+    <div class="card setup" id="setupHint">
+      <h3>👋 App da configurare</h3>
+      <p>Questa app è vergine: non ci sono ancora impianto né TAG.</p>
+      <ol>
+        <li>Vai in <b>⚙️ Opzioni</b> → <b>Accesso admin</b>.</li>
+        <li>Compila <b>Dati impianto e turno</b> (nome, indirizzo, orari dei giri, cancelli…).</li>
+        <li>Sblocca le posizioni e, davanti a ogni TAG, usa <b>Nuovo TAG</b>: nome, 📍 posizione e 📷 foto.</li>
+      </ol>
+      <p class="muted small-text">La mappa si centra da sola sui TAG appena inseriti.</p>
+    </div>
+
+    <div class="card" id="nextRoundCard">
+      <div class="muted">Prossimo giro</div>
+      <div id="nextRound" class="big-text">—</div>
+      <div id="roundsList" class="rounds"></div>
+      <div id="remState" class="muted small-text"></div>
+      <div class="row">
+        <button id="btnSkip" class="btn small danger">⏭ Salta giro attuale</button>
+      </div>
+      <div class="muted small-text">Tocca un giro per effettuarlo subito, anche fuori orario.</div>
+    </div>
+
+    <div class="card">
+      <div class="target-head">
+        <div>
+          <div class="muted">Destinazione</div>
+          <div id="targetName" class="big-text">—</div>
+        </div>
+        <div class="target-nav">
+          <button class="btn small" id="prevTag">◀</button>
+          <button class="btn small" id="nextTag">▶</button>
+        </div>
+      </div>
+
+      <div class="compass-wrap">
+        <div id="compass" class="compass">
+          <div id="arrow" class="arrow">➤</div>
+        </div>
+        <div>
+          <div id="distance" class="distance">— m</div>
+          <div id="gpsInfo" class="muted">GPS non attivo</div>
+          <button id="btnCompass" class="btn small">Attiva bussola</button>
+        </div>
+      </div>
+
+      <div id="nearBox" class="near hidden">
+        <strong>Sei vicino al TAG!</strong>
+        <img id="nearPhoto" alt="Posizione del TAG">
+      </div>
+
+      <div class="row">
+        <button id="btnBolla" class="btn big ok">✔ Bolla TAG (segna ora)</button>
+      </div>
+      <div class="row">
+        <a id="btnGmaps" class="btn" target="_blank" rel="noopener">Percorso a piedi su Google Maps</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="map"></div>
+      <div class="muted small-text">Linea gialla = da te al TAG · tratteggio = percorso del giro (1→2→3→4)</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Foto TAG</div>
+      <div id="photos" class="photos"></div>
+    </div>
+  </section>
+
+  <!-- ===================== SCHEDA ===================== -->
+  <section id="view-scheda" class="view">
+    <div class="seg no-print">
+      <button data-sheet="sheet" class="active">Report fine turno</button>
+      <button data-sheet="gpgSheet">Consuntivazione GPG</button>
+    </div>
+    <div class="sheet" id="sheet">
+      <table class="hdr">
+        <tr>
+          <td class="logo" rowspan="2"><div class="fs">SECURITY</div><div class="fs-sub">GRUPPO FERROVIE DELLO STATO ITALIANE</div></td>
+          <td class="title">REPORT DI FINE TURNO</td>
+        </tr>
+        <tr>
+          <td class="period">
+            Dalle ore <input data-f="dalleOre" type="time" class="line">
+            del giorno <input data-f="dalGiorno" class="line w5" placeholder="gg/mm">
+            alle ore <input data-f="alleOre" type="time" class="line">
+            del giorno <input data-f="alGiorno" class="line w5" placeholder="gg/mm">
+          </td>
+        </tr>
+      </table>
+
+      <table class="grid">
+        <tr><th colspan="8" class="center" id="rptSite">&nbsp;</th></tr>
+        <tr><th colspan="8" class="center">VERIFICA CANCELLI</th></tr>
+        <tr>
+          <th>DENOMINAZIONE</th><th>ORA</th><th colspan="2">CHIUSO</th>
+          <th>DENOMINAZIONE</th><th>ORA</th><th colspan="2">CHIUSO</th>
+        </tr>
+        <tbody id="gates"></tbody>
+      </table>
+
+      <table class="grid">
+        <tr><th class="w-name">Punti TAG</th><th colspan="6" class="center">Ora verifica</th></tr>
+        <tbody id="tagRows"></tbody>
+      </table>
+
+      <table class="grid">
+        <tr><th colspan="4" class="center">VERIFICA CAPANNONI - UFFICI (se trovate aperte, indicare quali)</th></tr>
+        <tbody id="sheds"></tbody>
+      </table>
+
+      <table class="grid">
+        <tr><th class="center">DESCRIZIONE SERVIZIO</th></tr>
+        <tr><td><textarea data-f="descrizione" rows="10" class="lined"></textarea></td></tr>
+      </table>
+
+      <table class="grid">
+        <tr><th>FF.OO. intervenuta</th><th>Ora Richiesta</th><th>Ora Intervento</th><th>Motivo</th></tr>
+        <tbody id="ffoo"></tbody>
+      </table>
+
+      <p class="note">Per qualsiasi nota di rilievo potrà essere utilizzato il retro del foglio con relativa FIRMA</p>
+      <table class="grid sign">
+        <tr><th>Nome agente</th><th>Firma Agente</th></tr>
+        <tr><td><input data-f="agente" class="cell"></td><td><input data-f="firma" class="cell"></td></tr>
+      </table>
+      <p class="foot">Informazione ad uso interno - Internal use information</p>
+    </div>
+    <div class="sheet hidden" id="gpgSheet">
+      <div class="gpg-logo"><div class="fs">SECURITY</div><div class="fs-sub">GRUPPO FERROVIE DELLO STATO ITALIANE</div></div>
+      <table class="grid gpg-info">
+        <tr><td class="lbl">Impianto</td><th id="gpgImpianto"></th></tr>
+        <tr><td class="lbl">Indirizzo</td><th id="gpgIndirizzo"></th></tr>
+        <tr><td class="lbl">IdV</td><th id="gpgIdv"></th></tr>
+      </table>
+      <h3 class="gpg-title">CONSUNTIVAZIONE GPG</h3>
+      <p class="center">GIORNO: <input data-k="gpgGiorno" class="line" placeholder="gg/mm/aaaa"></p>
+      <table class="grid gpg-prev">
+        <tr><td class="lbl">n° GPG previste</td><th id="gpgPrev"></th><td class="lbl">Orario</td><th id="gpgOrario"></th></tr>
+      </table>
+      <table class="grid gpg-main">
+        <tr><td class="blank" colspan="2"></td><th colspan="2">INIZIO TURNO</th><th colspan="2">FINE TURNO</th></tr>
+        <tr><td class="blank"></td><th>Nominativo</th><th>Data</th><th>Ora</th><th>Data</th><th>Ora</th></tr>
+        <tbody id="gpgRows"></tbody>
+      </table>
+      <p class="gpg-note">Gli orari da riportare nella tabella qui sopra <b>devono coincidere</b> con quelli che vengono annotati sul registro accessi, presente in portineria, in occasione dell’accesso e dell’uscita delle GPG.</p>
+      <div class="gpg-legal">
+        Via Marsala, 27 - 00185 Roma<br>
+        FS Security S.p.A. - Gruppo Ferrovie dello Stato Italiane<br>
+        Società con socio unico soggetta alla direzione e coordinamento di Ferrovie dello Stato Italiane S.p.A.<br>
+        Sede legale: Piazza della Croce Rossa, 1 - 00161 Roma · Cap. Soc. Euro 500.000,00<br>
+        Iscritta al Registro delle Imprese di Roma 16918161007 · Cod. Fisc. e P. Iva 16918161007 – R.E.A. 1683991
+      </div>
+    </div>
+    <div class="row no-print">
+      <button id="btnPrint" class="btn">Stampa / Salva PDF</button>
+      <button class="btn ok btnSend">📧 Invia schede</button>
+      <button id="btnNewSheet" class="btn danger">Nuova scheda</button>
+    </div>
+    <p class="muted small-text no-print">Tocca una casella orario (o data) vuota per inserire l'ora (o la data) attuale. Tocca SI/NO per selezionare. La scheda si salva da sola sul telefono.</p>
+  </section>
+
+  <!-- ===================== CARROZZE ===================== -->
+  <section id="view-carrozze" class="view">
+    <div class="card no-print">
+      <h3>Aggiungi carrozza</h3>
+      <div class="row tight">
+        <label>Luogo
+          <select id="cLuogo" class="field"><option>OMV</option><option>OML</option></select>
+        </label>
+        <label>Binario <input id="cBinario" class="field" inputmode="numeric"></label>
+      </div>
+      <div class="row">
+        <label class="btn big">📷 Fotografa la matricola
+          <input id="cPhoto" type="file" accept="image/*" capture="environment" hidden>
+        </label>
+      </div>
+      <div id="ocrBox" class="hidden">
+        <img id="ocrImg" class="ocr-img" alt="Foto matricola">
+        <div id="ocrStatus" class="muted"></div>
+        <div id="ocrAlt" class="rounds"></div>
+      </div>
+      <label class="muted">N° carrozza (letto dalla foto o scritto a mano)
+        <input id="cNumero" class="field big-field" inputmode="numeric" autocomplete="off">
+      </label>
+      <div class="row">
+        <button id="btnAddCar" class="btn ok">+ Inserisci nel modulo</button>
+      </div>
+      <p class="muted small-text">Puoi anche scrivere il numero a mano senza foto. Poi nel modulo tocca SI/NO per Aperta, Graffiti, Danneggiata.</p>
+    </div>
+
+    <div class="sheet" id="carSheet">
+      <table class="grid">
+        <tr><th colspan="7" class="center sheet-title">VERIFICA CARROZZE</th></tr>
+        <tr>
+          <td colspan="2">Totale controllate: <b id="totCtrl"></b></td>
+          <td colspan="2">Totale aperte: <b id="totAperte"></b></td>
+          <td colspan="3">Totale grafitate: <b id="totGraf"></b></td>
+        </tr>
+        <tr>
+          <td colspan="2">Persone allontanate: <b id="totPers"></b></td>
+          <td colspan="2"></td>
+          <td colspan="3"></td>
+        </tr>
+        <tr class="car-head">
+          <th>Luogo<br>(OMV – OML)</th><th>Binario</th><th>N° carrozza</th>
+          <th>Aperta<br>(SI-NO)</th><th>Graffiti<br>(SI-NO)</th><th>Danneggiata<br>(SI-NO)</th><th>N° Persone<br>allontanate</th>
+        </tr>
+        <tbody id="carRows"></tbody>
+      </table>
+      <p class="foot">Informazione ad uso interno - Internal use information</p>
+    </div>
+    <div class="row no-print">
+      <button id="btnPrintCar" class="btn">Stampa / Salva PDF</button>
+      <button class="btn ok btnSend">📧 Invia schede</button>
+      <button id="btnNewCar" class="btn danger">Nuovo modulo</button>
+    </div>
+  </section>
+
+  <!-- ===================== IMPOSTAZIONI ===================== -->
+  <section id="view-set" class="view">
+    <div class="card">
+      <h3>Invio schede via email</h3>
+      <p class="muted small-text">Le schede compilate vengono salvate come immagini JPG e allegate a una nuova mail.</p>
+      <label class="muted">Destinatari (A) – separati da virgola
+        <input id="mailTo" class="field" type="email" multiple placeholder="nome@azienda.it, altro@azienda.it">
+      </label>
+      <label class="muted">Copia conoscenza (Cc)
+        <input id="mailCc" class="field" type="email" multiple>
+      </label>
+      <label class="muted">Oggetto
+        <input id="mailSubject" class="field">
+      </label>
+      <div class="row">
+        <button class="btn ok btnSend">📧 Invia schede</button>
+        <button id="btnDownloadJpg" class="btn">Scarica JPG</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Notifiche</h3>
+      <label class="switch-row">
+        <input type="checkbox" id="remindersOn"> <b>Promemoria dei giri attivi</b>
+      </label>
+      <p class="muted web-only"><span class="schedText"></span> Tieni l'app aperta con "Avvia turno": lo schermo resta acceso e l'avviso suona.</p>
+      <p class="muted native-only hidden"><span class="schedText"></span> Gli avvisi arrivano anche ad app chiusa; "Avvia turno" tiene lo schermo acceso.</p>
+      <p class="muted small-text">Orari e numero dei giri si impostano in "Dati impianto e turno" (admin).</p>
+      <div class="row">
+        <button id="btnNotif" class="btn">Abilita notifiche</button>
+        <button id="btnTest" class="btn">Prova avviso</button>
+      </div>
+      <div class="row web-only">
+        <button id="btnIcs" class="btn">Aggiungi sveglie al calendario (.ics)</button>
+      </div>
+      <p class="muted small-text web-only">Il file .ics crea 4 promemoria ricorrenti ogni notte nel calendario del telefono: suonano anche ad app chiusa.</p>
+    </div>
+
+    <div class="card" id="adminLogin">
+      <h3>TAG 🔒</h3>
+      <p class="muted">Le posizioni dei TAG sono bloccate. Solo l'amministratore può modificarle.</p>
+      <div id="tagList"></div>
+      <div class="row">
+        <input id="adminPw" type="password" class="field" placeholder="Password admin" autocomplete="off">
+        <button id="btnAdmin" class="btn">Accesso admin</button>
+      </div>
+    </div>
+
+    <div id="adminPanel" class="hidden">
+      <div class="card admin">
+        <div class="target-head">
+          <h3>Modalità admin</h3>
+          <button id="btnLogout" class="btn small danger">Esci</button>
+        </div>
+        <div id="lockState" class="lock on"></div>
+        <div class="row"><button id="btnLock" class="btn"></button></div>
+        <p class="muted small-text">Uscendo dalla modalità admin le posizioni si ribloccano automaticamente.</p>
+      </div>
+
+      <div class="card admin">
+        <h3>Dati impianto e turno</h3>
+        <form id="siteForm" class="site-form">
+          <label>Nome impianto <input name="name" class="field" placeholder="es. Deposito Locomotive Nord"></label>
+          <label>Indirizzo <input name="address" class="field" placeholder="es. Via Roma, 1 - Città"></label>
+          <div class="row tight">
+            <label>IdV (istituto) <input name="idv" class="field" placeholder="es. nome istituto di vigilanza"></label>
+            <label>N° GPG previste <input name="gpg" type="number" min="0" max="20" class="field"></label>
+          </div>
+          <div class="row tight">
+            <label>Inizio turno <input name="shiftStart" type="time" class="field"></label>
+            <label>Fine turno <input name="shiftEnd" type="time" class="field"></label>
+          </div>
+          <div class="row tight">
+            <label>Primo giro <input name="firstRound" type="time" class="field"></label>
+            <label>Ogni (min) <input name="every" type="number" min="5" max="720" class="field"></label>
+            <label>N° giri <input name="rounds" type="number" min="1" max="6" class="field"></label>
+          </div>
+          <label>Cancelli da verificare (uno per riga)
+            <textarea name="gates" rows="3" class="field" placeholder="Cancello portineria&#10;Cancello carraio"></textarea>
+          </label>
+          <label>Capannoni / uffici da verificare (uno per riga)
+            <textarea name="sheds" rows="4" class="field" placeholder="Officina&#10;Magazzini&#10;Palazzina uffici"></textarea>
+          </label>
+          <div class="row"><button class="btn ok" type="submit">Salva dati impianto</button></div>
+        </form>
+      </div>
+
+      <div class="card admin">
+        <h3>Gestione TAG</h3>
+        <p class="muted small-text">Davanti al TAG premi "📍 Usa mia posizione", oppure scrivi le coordinate, oppure attiva "Sposta sulla mappa" e trascina il segnaposto.</p>
+        <div id="tagEdit"></div>
+
+        <div class="newtag">
+          <h4>➕ Nuovo TAG</h4>
+          <p class="muted small-text">Mettiti davanti al TAG, scrivi il nome, premi 📍 e scatta la foto. Le coordinate si possono anche scrivere a mano.</p>
+          <input id="ntName" class="field" placeholder="Nome (es. TAG Capannone tornio)">
+          <div class="row tight">
+            <label>Lat <input id="ntLat" class="field" inputmode="decimal" placeholder="45.041234"></label>
+            <label>Lng <input id="ntLng" class="field" inputmode="decimal" placeholder="7.667890"></label>
+          </div>
+          <div class="row">
+            <button id="ntHere" class="btn">📍 Usa mia posizione</button>
+            <label class="btn">📷 Scatta foto del TAG<input id="ntPhoto" type="file" accept="image/*" capture="environment" hidden></label>
+          </div>
+          <img id="ntPreview" class="ocr-img hidden" alt="Foto del nuovo TAG">
+          <div class="row"><button id="btnAddTag" class="btn ok">💾 Salva nuovo TAG</button></div>
+        </div>
+
+        <div class="row">
+          <button id="btnDrag" class="btn">Sposta sulla mappa: OFF</button>
+        </div>
+        <label class="muted">Distanza per mostrare la foto (metri)
+          <input id="nearRadius" type="number" min="5" max="200" class="field">
+        </label>
+      </div>
+
+      <div class="card admin">
+        <h3>Calibrazione bussola</h3>
+        <p class="muted small-text">1) Muovi il telefono disegnando un 8 nell'aria per qualche secondo. 2) In "Giro" seleziona un TAG che vedi. 3) Punta la parte alta del telefono verso quel TAG e premi il pulsante.</p>
+        <div id="headingNow" class="muted">Direzione attuale: bussola non attiva</div>
+        <div id="offsetNow" class="muted"></div>
+        <div class="row"><button id="btnCalTag" class="btn">🧭 Calibra puntando il TAG selezionato</button></div>
+        <div class="row">
+          <button id="btnCalMinus" class="btn small">−5°</button>
+          <button id="btnCalReset" class="btn small">Azzera</button>
+          <button id="btnCalPlus" class="btn small">+5°</button>
+        </div>
+      </div>
+
+      <div class="card admin">
+        <h3>Backup configurazione</h3>
+        <p class="muted small-text">Salva un file con TAG, coordinate e foto: serve per non perderli e per caricarli sui telefoni dei colleghi.</p>
+        <div class="row">
+          <button id="btnExport" class="btn">Esporta file</button>
+          <label class="btn">Importa file<input id="importFile" type="file" accept="application/json,.json" hidden></label>
+        </div>
+        <div class="row"><button id="btnResetTags" class="btn danger">Elimina tutti i TAG</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-view="giro" class="active">🧭 Giro</button>
+  <button data-view="scheda">📋 Scheda</button>
+  <button data-view="carrozze">🚃 Carrozze</button>
+  <button data-view="set">⚙️ Opzioni</button>
+</nav>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

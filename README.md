@@ -36,3 +36,12 @@ cd android-app && npm install && npm run apk
 ```
 La firma usa `android-app/keystore.properties` + `ronda-release.jks` (non salvati su git):
 senza la stessa chiave non si può aggiornare l'app già installata.
+
+## Versione universale (vergine) – cartella `universale/`
+Stessa app, ma senza impianto né TAG predefiniti: si configura per qualsiasi stazione.
+- **Opzioni → Accesso admin → Dati impianto e turno**: nome, indirizzo, IdV, n° GPG, orario del turno,
+  primo giro, cadenza e numero dei giri, cancelli e capannoni da verificare (finiscono nei moduli).
+- **Nuovo TAG**: nome + 📍 posizione GPS (o coordinate scritte) + 📷 foto scattata sul posto.
+  La mappa si centra da sola sui TAG inseriti.
+- **Promemoria dei giri** attivabili/disattivabili da Opzioni → Notifiche.
+- APK: `apk/RondaVigilanza-universale.apk` (pacchetto `it.ronda.vigilanza`, si installa accanto a Ronda Chisola).

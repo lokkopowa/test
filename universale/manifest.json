@@ -1,0 +1,12 @@
+{
+  "name": "Ronda Vigilanza",
+  "short_name": "Ronda",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#eef1f6",
+  "theme_color": "#0b3d91",
+  "icons": [
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

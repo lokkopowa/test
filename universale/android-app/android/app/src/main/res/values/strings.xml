@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ronda Vigilanza</string>
+    <string name="title_activity_main">Ronda Vigilanza</string>
+    <string name="package_name">it.ronda.vigilanza</string>
+    <string name="custom_url_scheme">it.ronda.vigilanza</string>
+</resources>

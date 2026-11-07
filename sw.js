@@ -6,7 +6,7 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('ronda-v') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 // Rete prima, cache come riserva (funziona anche senza campo nei capannoni)
 self.addEventListener('fetch', e => {
