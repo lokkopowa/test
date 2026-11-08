@@ -50,6 +50,40 @@
             </intent-filter>
         </activity>
 
+        <!-- Scorciatoia "PTT Parla": da assegnare al tasto laterale programmabile del telefono -->
+        <activity
+            android:name=".PttToggleActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.WalkiePTT.Invisible" />
+        <activity-alias
+            android:name=".PttShortcut"
+            android:exported="true"
+            android:icon="@mipmap/ic_ptt_shortcut"
+            android:label="@string/ptt_shortcut_name"
+            android:targetActivity=".PttToggleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Tasto PTT fisico con app ridotta / schermo spento -->
+        <service
+            android:name=".hw.PttKeyService"
+            android:exported="false"
+            android:label="@string/ptt_accessibility_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/ptt_accessibility" />
+        </service>
+
         <service
             android:name=".WalkieService"
             android:exported="false"

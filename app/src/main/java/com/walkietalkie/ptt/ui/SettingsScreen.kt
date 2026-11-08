@@ -6,6 +6,8 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,6 +44,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.walkietalkie.ptt.hw.HardwarePtt
 import com.walkietalkie.ptt.sound.Preamp
 import com.walkietalkie.ptt.sound.SoundSettings
 import com.walkietalkie.ptt.sound.ToneLibrary
@@ -172,6 +176,8 @@ fun SettingsScreen(settings: SoundSettings, onBack: () -> Unit) {
                     )
                 }
 
+                HardwareKeyCard()
+
                 SettingsCard(
                     "SELETTIVA IN ARRIVO",
                     "Suona quando qualcuno inizia a parlare, prima della sua voce",
@@ -257,6 +263,92 @@ fun SettingsScreen(settings: SoundSettings, onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(12.dp))
             }
+        }
+    }
+}
+
+/** Tasto PTT fisico: assegnazione, modalità, schermo spento e scorciatoia "PTT Parla". */
+@Composable
+private fun HardwareKeyCard() {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { HardwarePtt.load(context) }
+    val config by HardwarePtt.config.collectAsStateWithLifecycle()
+    val accessibilityOn by HardwarePtt.accessibilityActive.collectAsStateWithLifecycle()
+    var learning by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) { onDispose { HardwarePtt.learning = null } }
+
+    SettingsCard("TASTO PTT FISICO", "Usa il tasto laterale del telefono (o un tasto volume) come una radio") {
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Tasto assegnato", color = WalkieColors.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(
+                    if (learning) "Premi ora il tasto da usare…" else HardwarePtt.keyName(config.keyCode),
+                    color = if (learning) WalkieColors.Amber else WalkieColors.Muted, fontSize = 13.sp,
+                )
+            }
+            Box(
+                Modifier.clip(RoundedCornerShape(50)).background(if (learning) WalkieColors.Glass else WalkieColors.Orange)
+                    .clickable {
+                        if (learning) {
+                            learning = false
+                            HardwarePtt.learning = null
+                        } else {
+                            learning = true
+                            HardwarePtt.learning = { learning = false }
+                        }
+                    }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Text(if (learning) "Annulla" else "Assegna tasto", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+        if (config.assigned) {
+            Text(
+                "Rimuovi tasto",
+                color = WalkieColors.Muted, fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 8.dp).clickable {
+                    HardwarePtt.update(context) { it.copy(keyCode = KeyEvent.KEYCODE_UNKNOWN) }
+                },
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        OptionRow(
+            "Tieni premuto per parlare", "Come una radio: parli finché tieni premuto il tasto",
+            selected = !config.toggle, onSelect = { HardwarePtt.update(context) { it.copy(toggle = false) } }, onPreview = null,
+        )
+        OptionRow(
+            "Premi per iniziare, premi per finire", "Comodo con i guanti; si ferma da solo dopo 60 s",
+            selected = config.toggle, onSelect = { HardwarePtt.update(context) { it.copy(toggle = true) } }, onPreview = null,
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable {
+                runCatching {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }.padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(if (accessibilityOn) WalkieColors.Teal else WalkieColors.Red))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Funziona a schermo spento e app ridotta", color = WalkieColors.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(
+                    if (accessibilityOn) "Attivo" else
+                        "Non attivo: tocca qui, poi Accessibilità → App installate → \"Walkie PTT – tasto PTT\" → attiva",
+                    color = if (accessibilityOn) WalkieColors.Teal else WalkieColors.Muted, fontSize = 12.sp,
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WalkieColors.Glass).padding(12.dp)) {
+            Text("Il tasto del tuo telefono sa solo aprire un'app?", color = WalkieColors.Text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(
+                "Succede per esempio sui Ulefone Armor. Nelle impostazioni del telefono (cerca \"tasto personalizzato\" " +
+                    "o \"custom key\") assegna al tasto l'app \"PTT Parla\": premi una volta per parlare, di nuovo per " +
+                    "smettere (stop automatico dopo 60 s). Funziona anche a schermo spento e bloccato.",
+                color = WalkieColors.Muted, fontSize = 12.sp, lineHeight = 17.sp,
+            )
         }
     }
 }

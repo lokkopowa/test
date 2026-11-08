@@ -18,10 +18,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -41,8 +39,6 @@ class WalkieService : Service() {
         private const val ACTION_TALK = "com.walkietalkie.ptt.TALK"
         private const val ACTION_EXIT = "com.walkietalkie.ptt.EXIT"
 
-        /** Dalla notifica si parla "a interruttore": per sicurezza la trasmissione si chiude da sola. */
-        private const val MAX_TALK_MS = 60_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -50,7 +46,6 @@ class WalkieService : Service() {
     private val session get() = app.session
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
-    private var talkTimeout: Job? = null
     private var lastNotifiedId = 0L
     private val unread = ArrayList<String>()
     private var lastStartId = 0
@@ -96,14 +91,13 @@ class WalkieService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
         when (intent?.action) {
-            ACTION_TALK -> toggleTalk()
+            ACTION_TALK -> session.toggleTalking()
             ACTION_EXIT -> session.stop()
         }
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        talkTimeout?.cancel()
         session.stopTalking()
         scope.cancel()
         releaseLocks()
@@ -115,20 +109,6 @@ class WalkieService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         session.stop()
         super.onTaskRemoved(rootIntent)
-    }
-
-    private fun toggleTalk() {
-        if (session.transmitting.value) {
-            talkTimeout?.cancel()
-            session.stopTalking()
-        } else {
-            session.startTalking()
-            talkTimeout?.cancel()
-            talkTimeout = scope.launch {
-                delay(MAX_TALK_MS)
-                session.stopTalking()
-            }
-        }
     }
 
     // ---------------------------------------------------------------- notifiche

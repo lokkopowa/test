@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Walkie PTT</string>
+    <string name="ptt_shortcut_name">PTT Parla</string>
+    <string name="ptt_accessibility_label">Walkie PTT – tasto PTT</string>
+    <string name="ptt_accessibility_description">Permette di usare il tasto PTT fisico (tasto laterale o volume) anche con l\'app ridotta o lo schermo spento. Walkie PTT non legge lo schermo né i tuoi contenuti: guarda solo il tasto che hai assegnato nelle impostazioni dell\'app e lascia passare tutti gli altri.</string>
 </resources>

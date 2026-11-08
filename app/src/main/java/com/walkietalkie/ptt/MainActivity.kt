@@ -1,6 +1,7 @@
 package com.walkietalkie.ptt
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,6 +12,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.walkietalkie.ptt.hw.HardwarePtt
 import com.walkietalkie.ptt.ui.AboutDialog
 import com.walkietalkie.ptt.ui.ChatScreen
 import com.walkietalkie.ptt.ui.SettingsScreen
@@ -56,6 +58,13 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // Tasto PTT fisico (o assegnazione del tasto) mentre l'app è aperta.
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
+        HardwarePtt.onKey(this, event) || super.onKeyDown(keyCode, event)
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
+        HardwarePtt.onKey(this, event) || super.onKeyUp(keyCode, event)
 
     override fun onStart() {
         super.onStart()

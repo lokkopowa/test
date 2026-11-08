@@ -23,6 +23,7 @@ import com.walkietalkie.ptt.net.InternetLink
 import com.walkietalkie.ptt.net.Packet
 import com.walkietalkie.ptt.net.VoiceCodec
 import com.walkietalkie.ptt.sound.SoundSettings
+import com.walkietalkie.ptt.sound.ToneLibrary
 import com.walkietalkie.ptt.sound.TonePlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +88,7 @@ class WalkieSession(private val app: Application) {
         private const val NET_AUDIO_TIMEOUT_MS = 2_500L
         private const val NET_AUDIO_PREBUFFER_MS = 250
         private const val NET_AUDIO_CHUNK = 800 // byte µ-law = 100 ms
+        private const val MAX_TOGGLE_TALK_MS = 60_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -719,9 +721,31 @@ class WalkieSession(private val app: Application) {
 
     /** Tasto PTT rilasciato: chiude il flusso (il ricevente sente il "bip"). */
     fun stopTalking() {
+        talkTimeout?.cancel()
+        talkTimeout = null
         if (!_transmitting.value) return
         audio.stopRecording()
         _transmitting.value = false
+    }
+
+    private var talkTimeout: Job? = null
+
+    /**
+     * PTT "a interruttore" (notifica, scorciatoia "PTT Parla", tasto fisico in modalità interruttore):
+     * premi per parlare, premi di nuovo per smettere. Per sicurezza si chiude da solo dopo 60 s.
+     */
+    fun toggleTalking() {
+        if (_transmitting.value) {
+            stopTalking()
+            TonePlayer.play(sounds.tone(ToneLibrary.ptt(ToneLibrary.PttTone.CLICK))) // conferma: smesso
+            return
+        }
+        startTalking()
+        if (!_transmitting.value) return
+        talkTimeout = scope.launch {
+            delay(MAX_TOGGLE_TALK_MS)
+            stopTalking()
+        }
     }
 
     // ---------------------------------------------------------------- utilità
